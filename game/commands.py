@@ -1,4 +1,4 @@
-from game.board import is_inside_board, pixel_to_cell, print_board, move_piece
+from game.board import is_inside_board, pixel_to_cell, print_board, move_piece, is_king
 from game.constants import EMPTY_CELL
 from game.pieces import same_color
 from game.rules import is_legal_move, is_path_clear
@@ -68,30 +68,38 @@ def handle_click(parts, board, selected, pending):
 def handle_wait(parts, board, pending):
     """
     מטפל בפקודת wait.
-    מחזיר pending מעודכן.
+    מחזיר (pending, game_over).
+    game_over=True אם המהלך הסתיים ונאכל מלך.
     """
     if pending is None:
-        return pending
+        return None, False
 
     milliseconds = int(parts[1])
     pending.elapsed += milliseconds
 
     if pending.elapsed >= pending.duration:
+        target = board[pending.target_row][pending.target_col]
+        game_over = is_king(target)
         move_piece(board, pending.source_row, pending.source_col,
                    pending.target_row, pending.target_col)
-        return None
+        return None, game_over
 
-    return pending
+    return pending, False
 
 
 def process_commands(command_lines, board):
     """
     מעבד את כל שורות הפקודות ומפעיל את הטיפולים המתאימים.
+    מפסיק לעבד אחרי game-over.
     """
     selected = None
     pending = None
+    game_over = False
 
     for line in command_lines:
+        if game_over:
+            break
+
         parts = line.split()
         if not parts:
             continue
@@ -102,7 +110,7 @@ def process_commands(command_lines, board):
             selected, pending = handle_click(parts, board, selected, pending)
 
         elif command == CMD_WAIT:
-            pending = handle_wait(parts, board, pending)
+            pending, game_over = handle_wait(parts, board, pending)
 
         elif command == CMD_PRINT:
             if len(parts) == 2 and parts[1] == PRINT_BOARD_ARG:

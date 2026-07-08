@@ -39,6 +39,12 @@ def print_board(board):
         print(" ".join(row))
 
 
+def is_king(piece):
+    from game.pieces import get_type
+    from game.constants import KING
+    return piece != EMPTY_CELL and get_type(piece) == KING
+
+
 def move_piece(board, source_row, source_col, target_row, target_col):
     piece = board[source_row][source_col]
     board[source_row][source_col] = EMPTY_CELL

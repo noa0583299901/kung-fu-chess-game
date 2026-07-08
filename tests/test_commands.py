@@ -150,23 +150,26 @@ class TestPawnEdgeCases:
         assert pending is None
     def test_no_pending_returns_none(self):
         board = simple_board()
-        result = handle_wait(["wait", "500"], board, None)
+        result, game_over = handle_wait(["wait", "500"], board, None)
         assert result is None
+        assert game_over is False
 
     def test_elapsed_not_enough_updates_pending(self):
         board = simple_board()
         board[2][2] = "wP"
         pending = PendingMove(2, 2, 1, 2, duration=1000, elapsed=0)
-        result = handle_wait(["wait", "500"], board, pending)
+        result, game_over = handle_wait(["wait", "500"], board, pending)
         assert isinstance(result, PendingMove)
         assert result.elapsed == 500
+        assert game_over is False
 
     def test_elapsed_exact_completes_move(self):
         board = simple_board()
         board[2][2] = "wP"
         pending = PendingMove(2, 2, 1, 2, duration=1000, elapsed=0)
-        result = handle_wait(["wait", "1000"], board, pending)
+        result, game_over = handle_wait(["wait", "1000"], board, pending)
         assert result is None
+        assert game_over is False
         assert board[1][2] == "wP"
         assert board[2][2] == EMPTY_CELL
 
@@ -174,8 +177,9 @@ class TestPawnEdgeCases:
         board = simple_board()
         board[2][2] = "wP"
         pending = PendingMove(2, 2, 1, 2, duration=1000, elapsed=800)
-        result = handle_wait(["wait", "300"], board, pending)
+        result, game_over = handle_wait(["wait", "300"], board, pending)
         assert result is None
+        assert game_over is False
         assert board[1][2] == "wP"
 
 
