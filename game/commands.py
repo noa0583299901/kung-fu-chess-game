@@ -90,16 +90,13 @@ def handle_wait(parts, board, pending):
 def process_commands(command_lines, board):
     """
     מעבד את כל שורות הפקודות ומפעיל את הטיפולים המתאימים.
-    מפסיק לעבד אחרי game-over.
+    אחרי game-over, click ו-wait מתעלמים — אבל print עדיין עובד.
     """
     selected = None
     pending = None
     game_over = False
 
     for line in command_lines:
-        if game_over:
-            break
-
         parts = line.split()
         if not parts:
             continue
@@ -107,10 +104,12 @@ def process_commands(command_lines, board):
         command = parts[0]
 
         if command == CMD_CLICK:
-            selected, pending = handle_click(parts, board, selected, pending)
+            if not game_over:
+                selected, pending = handle_click(parts, board, selected, pending)
 
         elif command == CMD_WAIT:
-            pending, game_over = handle_wait(parts, board, pending)
+            if not game_over:
+                pending, game_over = handle_wait(parts, board, pending)
 
         elif command == CMD_PRINT:
             if len(parts) == 2 and parts[1] == PRINT_BOARD_ARG:

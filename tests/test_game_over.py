@@ -20,7 +20,6 @@ def make_board(*rows):
 class TestHandleWaitGameOver:
 
     def test_capturing_enemy_king_returns_game_over(self):
-        # צריח לבן עם pending לנחות על מלך שחור — המהלך מסתיים וצריך להחזיר game_over=True
         board = [
             ["bK", EMPTY_CELL],
             ["wR", EMPTY_CELL],
@@ -31,7 +30,6 @@ class TestHandleWaitGameOver:
         assert game_over is True
 
     def test_normal_move_does_not_trigger_game_over(self):
-        # תנועה רגילה לתא ריק — game_over צריך להיות False
         board = [
             [EMPTY_CELL, EMPTY_CELL],
             ["wR", EMPTY_CELL],
@@ -42,7 +40,6 @@ class TestHandleWaitGameOver:
         assert game_over is False
 
     def test_capturing_enemy_piece_not_king_does_not_trigger_game_over(self):
-        # תפיסת כלי שחור שאינו מלך — game_over צריך להיות False
         board = [
             ["bQ", EMPTY_CELL],
             ["wR", EMPTY_CELL],
@@ -53,14 +50,12 @@ class TestHandleWaitGameOver:
         assert game_over is False
 
     def test_no_pending_returns_no_game_over(self):
-        # אין pending — game_over False, pending נשאר None
         board = [[EMPTY_CELL, EMPTY_CELL]]
         new_pending, game_over = handle_wait(["wait", "500"], board, None)
         assert new_pending is None
         assert game_over is False
 
     def test_move_not_finished_yet_no_game_over(self):
-        # elapsed עדיין לא הגיע לduration — לא מסיים, לא game_over
         board = [
             [EMPTY_CELL, EMPTY_CELL],
             ["wR", EMPTY_CELL],
@@ -71,7 +66,6 @@ class TestHandleWaitGameOver:
         assert game_over is False
 
     def test_capturing_white_king_triggers_game_over(self):
-        # תפיסת מלך לבן על ידי כלי שחור — game_over גם כן
         board = [
             ["wK", EMPTY_CELL],
             ["bR", EMPTY_CELL],
@@ -83,53 +77,31 @@ class TestHandleWaitGameOver:
 
 
 # ---------------------------------------------------------------------------
-# process_commands — עצירה אחרי game-over
+# process_commands — התנהגות אחרי game-over
 # ---------------------------------------------------------------------------
 
 class TestProcessCommandsGameOver:
 
-    def test_commands_after_king_capture_are_ignored(self, capsys):
-        # צריח לבן אוכל מלך שחור, ואחרי זה יש עוד פקודות — אמורות להתעלם
+    def test_click_after_king_capture_is_ignored(self):
+        # click אחרי game-over לא אמור לבחור או להזיז כלים
         board = [
             ["bK", EMPTY_CELL, EMPTY_CELL],
             ["wR", EMPTY_CELL, EMPTY_CELL],
         ]
         commands = [
             "click 50 150",    # בוחר wR ב-(1,0)
-            "click 50 50",     # שולח ל-(0,0) — נחסם על bK
-            "wait 1000",       # מסיים תנועה — bK נאכל, game over
-            "click 150 150",   # אמור להתעלם
-            "print board",
+            "click 50 50",     # שולח ל-(0,0)
+            "wait 1000",       # מסיים — game over
+            "click 150 50",    # אמור להתעלם — לא בוחר כלום
+            "click 250 50",    # אמור להתעלם
         ]
         process_commands(commands, board)
-        captured = capsys.readouterr()
-        # אחרי game over אין print — הפקודה התעלמה
-        assert captured.out == ""
+        # הלוח לא השתנה אחרי game over
+        assert board[0][0] == "wR"
+        assert board[0][1] == EMPTY_CELL
+        assert board[0][2] == EMPTY_CELL
 
-    def test_print_before_game_over_works(self, capsys):
-        # print לפני game-over עובד נורמלי, print אחרי game-over מתעלם
-        board = [
-            ["bK", EMPTY_CELL],
-            ["wR", EMPTY_CELL],
-        ]
-        commands = [
-            "print board",    # לפני game over — אמור להדפיס
-            "click 50 150",
-            "click 50 50",
-            "wait 1000",
-            "print board",    # אחרי game over — אמור להתעלם
-        ]
-        process_commands(commands, board)
-        captured = capsys.readouterr()
-        # הלוח הוא 2 שורות — print אחד = 2 שורות פלט.
-        # שני print היה מדפיס 4 שורות. מוודאים שהודפסו בדיוק 2.
-        lines = captured.out.strip().split("\n")
-        assert len(lines) == 2
-        # התוכן של הprint הראשון — לפני המהלך
-        assert lines[0] == "bK ."
-        assert lines[1] == "wR ."
-
-    def test_wait_after_game_over_ignored(self):
+    def test_wait_after_game_over_does_not_move_piece(self):
         # wait אחרי game-over לא אמור לזוז כלי
         board = [
             ["bK", EMPTY_CELL],
@@ -137,45 +109,114 @@ class TestProcessCommandsGameOver:
             [EMPTY_CELL, EMPTY_CELL],
         ]
         commands = [
-            "click 50 150",   # בוחר wR
-            "click 50 50",    # שולח ל-(0,0)
+            "click 50 150",
+            "click 50 50",
             "wait 1000",      # game over
-            "click 50 50",    # אמור להתעלם — wR כבר אכל
+            "click 50 50",    # אמור להתעלם
             "click 50 250",   # אמור להתעלם
             "wait 1000",      # אמור להתעלם
         ]
         process_commands(commands, board)
-        # הלוח לא אמור להשתנות אחרי game over
-        assert board[0][0] == "wR"  # wR נמצא במיקומו הסופי
-        assert board[1][0] == EMPTY_CELL  # המקור ריק
+        assert board[0][0] == "wR"
+        assert board[1][0] == EMPTY_CELL
+        assert board[2][0] == EMPTY_CELL  # לא זז לשורה 2
 
-    def test_game_without_king_capture_continues_normally(self, capsys):
-        # משחק שבו לא נאכל מלך — ממשיך לעבד פקודות
+    def test_print_works_after_game_over(self, capsys):
+        # print עובד גם אחרי game-over — מראה את מצב הלוח הסופי
         board = [
-            [EMPTY_CELL, EMPTY_CELL],
-            ["wR", EMPTY_CELL],
+            ["bK", EMPTY_CELL, EMPTY_CELL],
+            ["wR", EMPTY_CELL, EMPTY_CELL],
         ]
         commands = [
-            "click 50 150",   # בוחר wR
-            "click 150 150",  # שולח ל-(1,1)
-            "wait 1000",      # מסיים — אין game over
-            "print board",    # אמור להדפיס
+            "click 50 150",
+            "click 50 50",
+            "wait 1000",       # game over
+            "print board",     # אמור לעבוד
         ]
         process_commands(commands, board)
         captured = capsys.readouterr()
-        assert captured.out != ""  # הדפיס משהו — לא עצר
+        assert captured.out.strip() == "wR . .\n. . ."
 
-    def test_full_game_over_sequence_board_state(self):
-        # בדיקת מצב הלוח הסופי אחרי תפיסת מלך
+    def test_print_before_game_over_also_works(self, capsys):
+        # print לפני game-over עובד, וגם אחריו
         board = [
             ["bK", EMPTY_CELL],
             ["wR", EMPTY_CELL],
         ]
         commands = [
-            "click 50 150",   # בוחר wR ב-(1,0)
-            "click 50 50",    # שולח ל-(0,0) — אוכל bK
-            "wait 1000",      # מסיים
+            "print board",    # לפני — מדפיס מצב ראשוני
+            "click 50 150",
+            "click 50 50",
+            "wait 1000",
+            "print board",    # אחרי — מדפיס מצב סופי
+        ]
+        process_commands(commands, board)
+        captured = capsys.readouterr()
+        lines = captured.out.strip().split("\n")
+        # 2 הדפסות × 2 שורות = 4 שורות
+        assert len(lines) == 4
+        assert lines[0] == "bK ."  # לפני המהלך
+        assert lines[1] == "wR ."
+        assert lines[2] == "wR ."  # אחרי המהלך
+        assert lines[3] == ". ."
+
+    def test_game_without_king_capture_continues_normally(self, capsys):
+        board = [
+            [EMPTY_CELL, EMPTY_CELL],
+            ["wR", EMPTY_CELL],
+        ]
+        commands = [
+            "click 50 150",
+            "click 150 150",
+            "wait 1000",
+            "print board",
+        ]
+        process_commands(commands, board)
+        captured = capsys.readouterr()
+        assert captured.out != ""
+
+    def test_full_game_over_sequence_board_state(self):
+        board = [
+            ["bK", EMPTY_CELL],
+            ["wR", EMPTY_CELL],
+        ]
+        commands = [
+            "click 50 150",
+            "click 50 50",
+            "wait 1000",
         ]
         process_commands(commands, board)
         assert board[0][0] == "wR"
         assert board[1][0] == EMPTY_CELL
+
+    def test_platform_test1_king_capture(self, capsys):
+        # שחזור טסט 1 של הפלטפורמה
+        board = [["wR", EMPTY_CELL, "bK"]]
+        commands = [
+            "click 50 50",
+            "click 250 50",
+            "wait 2000",
+            "print board",
+        ]
+        process_commands(commands, board)
+        captured = capsys.readouterr()
+        assert captured.out.strip() == ". . wR"
+
+    def test_platform_test2_no_moves_after_game_over(self, capsys):
+        # שחזור טסט 2 של הפלטפורמה
+        board = [
+            ["wR", EMPTY_CELL, "bK"],
+            ["bR", EMPTY_CELL, EMPTY_CELL],
+        ]
+        commands = [
+            "click 50 50",
+            "click 250 50",
+            "wait 2000",
+            "click 50 150",
+            "click 150 150",
+            "wait 1000",
+            "print board",
+        ]
+        process_commands(commands, board)
+        captured = capsys.readouterr()
+        assert captured.out.strip() == ". . wR\nbR . ."
