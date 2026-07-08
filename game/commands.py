@@ -1,4 +1,4 @@
-from game.board import is_inside_board, pixel_to_cell, print_board, move_piece, is_king
+from game.board import is_inside_board, pixel_to_cell, print_board, move_piece, is_king, promote_pawn_if_needed
 from game.constants import EMPTY_CELL
 from game.pieces import same_color
 from game.rules import is_legal_move, is_path_clear
@@ -82,6 +82,7 @@ def handle_wait(parts, board, pending):
         game_over = is_king(target)
         move_piece(board, pending.source_row, pending.source_col,
                    pending.target_row, pending.target_col)
+        promote_pawn_if_needed(board, pending.target_row, pending.target_col)
         return None, game_over
 
     return pending, False

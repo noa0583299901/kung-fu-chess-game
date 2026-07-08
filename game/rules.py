@@ -11,12 +11,25 @@ def is_sliding_piece(piece_type):
     return piece_type in (QUEEN, ROOK, BISHOP)
 
 
-def is_legal_pawn_move(color, dr, dc, target):
+def is_legal_pawn_move(color, dr, dc, target, r1=None, rows=None):
     direction = -1 if color == WHITE else 1
+
     if dc == 0:
-        return dr == direction and target == EMPTY_CELL
+        if dr == direction and target == EMPTY_CELL:
+            return True
+        if (
+            dr == 2 * direction
+            and r1 is not None
+            and rows is not None
+            and r1 == (rows - 2 if color == WHITE else 1)
+            and target == EMPTY_CELL
+        ):
+            return True
+        return False
+
     if abs(dc) == 1 and dr == direction:
         return target != EMPTY_CELL and get_color(target) != color
+
     return False
 
 
@@ -47,13 +60,21 @@ def is_legal_move(board, piece, r1, c1, r2, c2):
         return (abs_dr == 2 and abs_dc == 1) or (abs_dr == 1 and abs_dc == 2)
 
     if piece_type == PAWN:
-        return is_legal_pawn_move(color, dr, dc, target)
+        rows = len(board)
+        return is_legal_pawn_move(color, dr, dc, target, r1, rows)
 
     return False
 
 
 def is_path_clear(board, piece, r1, c1, r2, c2):
     piece_type = get_type(piece)
+
+    # פאון שזז 2 תאים — בודק שהתא האמצעי פנוי
+    if piece_type == PAWN:
+        if abs(r2 - r1) == 2:
+            mid_row = (r1 + r2) // 2
+            return board[mid_row][c1] == EMPTY_CELL
+        return True
 
     if not is_sliding_piece(piece_type):
         return True

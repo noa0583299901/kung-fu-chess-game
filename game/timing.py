@@ -27,7 +27,7 @@ def move_duration(piece, r1, c1, r2, c2):
     if piece_type == KNIGHT:
         return KNIGHT_MOVE_TIME
     if piece_type == PAWN:
-        return MOVE_TIME_PER_CELL
+        return abs_dr * MOVE_TIME_PER_CELL
     if piece_type == ROOK:
         return max(abs_dr, abs_dc) * MOVE_TIME_PER_CELL
     if piece_type == BISHOP:

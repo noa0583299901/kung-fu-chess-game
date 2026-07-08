@@ -49,3 +49,25 @@ def move_piece(board, source_row, source_col, target_row, target_col):
     piece = board[source_row][source_col]
     board[source_row][source_col] = EMPTY_CELL
     board[target_row][target_col] = piece
+
+
+def promote_pawn_if_needed(board, row, col):
+    """
+    אם הכלי ב-(row, col) הוא פאון שהגיע לשורה האחרונה — הופך למלכה.
+    לבן מגיע לשורה 0, שחור מגיע לשורה האחרונה.
+    """
+    from game.pieces import get_type, get_color
+    from game.constants import PAWN, QUEEN
+
+    piece = board[row][col]
+    if piece == EMPTY_CELL:
+        return
+    if get_type(piece) != PAWN:
+        return
+
+    rows = len(board)
+    color = get_color(piece)
+    last_row = 0 if color == "w" else rows - 1
+
+    if row == last_row:
+        board[row][col] = color + QUEEN
