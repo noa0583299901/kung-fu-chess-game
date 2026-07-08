@@ -1,4 +1,4 @@
-# Git repo URL: <YOUR_REPO_URL_HERE>
+# Git repo URL: https://github.com/noa0583299901/kung-fu-chess-game
 
 from game.parser import parse_input
 from game.board import validate_board
