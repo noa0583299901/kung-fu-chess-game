@@ -3,16 +3,23 @@
 motion.py — מייצג תנועה פעילה של כלי.
 מחזיק מקור, יעד, משך זמן, וזמן שעבר.
 לא יודע על Board, חוקי שחמט, clicks, או rendering.
+
+Timing constants:
+  CELL_SIZE = 100 pixels
+  PIECE_SPEED = 100 pixels per second
+  => time per cell = CELL_SIZE / PIECE_SPEED = 1000ms
+
+Moving N squares takes N × 1000ms.
+Diagonal movement uses cell-step duration, not Euclidean pixel distance.
+Knight L-shape: abs_dr + abs_dc cell steps.
 """
 from kungfu_chess.model.position import Position
-from kungfu_chess.model.piece import (
-    Piece, KING, KNIGHT, PAWN, ROOK, BISHOP, QUEEN,
-)
+from kungfu_chess.model.piece import Piece, KNIGHT
 
-# זמנים קבועים
-KING_MOVE_TIME = 1000
-KNIGHT_MOVE_TIME = 3000
-MOVE_TIME_PER_CELL = 1000
+# Fixed constants for tests (from spec)
+CELL_SIZE = 100          # pixels
+PIECE_SPEED = 100        # pixels per second
+MOVE_TIME_PER_CELL = (CELL_SIZE * 1000) // PIECE_SPEED  # = 1000ms
 
 
 class Motion:
@@ -33,21 +40,18 @@ class Motion:
 
 
 def calculate_duration(piece: Piece, source: Position, destination: Position) -> int:
-    """מחשב את משך התנועה לפי סוג הכלי והמרחק."""
+    """
+    מחשב את משך התנועה.
+    N squares × MOVE_TIME_PER_CELL.
+    Knight: abs_dr + abs_dc cell steps (L-shape).
+    All others: max(abs_dr, abs_dc) cell steps.
+    """
     abs_dr = abs(destination.row - source.row)
     abs_dc = abs(destination.col - source.col)
 
-    if piece.kind == KING:
-        return KING_MOVE_TIME
     if piece.kind == KNIGHT:
-        return KNIGHT_MOVE_TIME
-    if piece.kind == PAWN:
-        return abs_dr * MOVE_TIME_PER_CELL
-    if piece.kind == ROOK:
-        return max(abs_dr, abs_dc) * MOVE_TIME_PER_CELL
-    if piece.kind == BISHOP:
-        return abs_dr * MOVE_TIME_PER_CELL
-    if piece.kind == QUEEN:
-        return max(abs_dr, abs_dc) * MOVE_TIME_PER_CELL
+        cells = abs_dr + abs_dc
+    else:
+        cells = max(abs_dr, abs_dc)
 
-    return MOVE_TIME_PER_CELL
+    return cells * MOVE_TIME_PER_CELL

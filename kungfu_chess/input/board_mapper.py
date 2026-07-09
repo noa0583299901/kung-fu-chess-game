@@ -7,7 +7,8 @@ Pattern: Coordinate Adapter.
 """
 from kungfu_chess.model.position import Position
 
-CELL_SIZE = 100
+# Fixed constant for tests (from spec)
+CELL_SIZE = 100  # pixels
 
 
 def pixel_to_position(x: int, y: int) -> Position:

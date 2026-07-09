@@ -3,10 +3,16 @@
 controller.py — מפרש לחיצות ומנהל selected-cell state.
 תלוי ב-BoardMapper ו-GameEngine.
 לא מכיל: חוקי שחמט, Board mutation, rendering, או timing.
+לא קורא ל-Board.move_piece ישירות, ולא ל-RuleEngine ישירות.
+
+Selection policy (fixed):
+- First click on a piece: select it.
+- First click on empty cell: ignore.
+- Second click (in-board): call GameEngine.request_move, then clear selection.
+- Outside-board click when no selection: ignore.
+- Outside-board click when selection exists: cancel selection, no command.
 """
 from kungfu_chess.model.position import Position
-from kungfu_chess.model.board import Board
-from kungfu_chess.model.piece import Piece
 from kungfu_chess.engine.game_engine import GameEngine
 from kungfu_chess.input.board_mapper import pixel_to_position
 
@@ -24,16 +30,11 @@ class Controller:
         """
         מטפל בלחיצה. מנהל selected state ושולח מהלך ל-engine כשצריך.
         """
-        # קואורדינטות שליליות — מתעלם
+        # קואורדינטות שליליות — מחוץ ללוח
         if x < 0 or y < 0:
-            return
-
-        # game over — מתעלם
-        if self._engine.game_over:
-            return
-
-        # תנועה פעילה — מתעלם מכל לחיצה
-        if self._engine.motion_in_progress:
+            if self._selected_pos is not None:
+                # outside-board click cancels selection
+                self._selected_pos = None
             return
 
         board = self._engine.board
@@ -41,31 +42,26 @@ class Controller:
 
         # מחוץ ללוח
         if not board.is_inside(pos):
+            if self._selected_pos is not None:
+                # outside-board click cancels selection, no command
+                self._selected_pos = None
             return
 
-        piece_at_pos = board.get_piece_at(pos)
+        # --- In-board click ---
 
-        # אין כלי נבחר — בוחרים
+        # אין כלי נבחר (first click)
         if self._selected_pos is None:
+            piece_at_pos = board.get_piece_at(pos)
             if piece_at_pos is not None:
                 self._selected_pos = pos
+            # click on empty cell: ignore
             return
 
-        # יש כלי נבחר — בודקים מה לעשות עם הלחיצה החדשה
+        # יש כלי נבחר (second click) — שולח request_move ומנקה selection
         selected_piece = board.get_piece_at(self._selected_pos)
 
-        # הכלי הנבחר כבר לא קיים (מקרה קצה)
-        if selected_piece is None:
-            self._selected_pos = None
-            return
+        if selected_piece is not None:
+            self._engine.request_move(selected_piece, pos)
 
-        # לחיצה על כלי אותו צבע — מחליפים בחירה
-        if piece_at_pos is not None and piece_at_pos.color == selected_piece.color:
-            self._selected_pos = pos
-            return
-
-        # ניסיון מהלך — שולח ל-engine
-        response = self._engine.request_move(selected_piece, pos)
-
-        # בכל מקרה — מבטלים בחירה
+        # Clear selection after every second in-board click
         self._selected_pos = None

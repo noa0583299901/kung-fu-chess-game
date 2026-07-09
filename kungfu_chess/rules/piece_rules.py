@@ -1,86 +1,127 @@
 """
 שכבה: Movement Rules
-piece_rules — גיאומטריית תנועה לכל סוג כלי.
-מקבלת מיקום מקור ויעד ומחזירה אם הצורה חוקית.
-לא יודעת על Board state, חסימות, captures, או זמן.
-תלויה רק ב-Position וב-piece kind/color.
+piece_rules.py — חוקי תנועה לכל סוג כלי.
+Interface: legal_destinations(board, piece) -> set[Position]
+מחזיר את כל היעדים החוקיים — כולל תאים תפוסים באויב (capture).
+עוצר לפני כלי ידידותי (blocking).
+לא מבצע: capture, remove, move, או כל mutation.
+Stateless — לא שומר selected, motions, elapsed, או game-over.
 Pattern: Strategy per piece type.
 """
 from kungfu_chess.model.position import Position
 from kungfu_chess.model.piece import (
-    KING, QUEEN, ROOK, BISHOP, KNIGHT, PAWN, WHITE,
+    Piece, KING, QUEEN, ROOK, BISHOP, KNIGHT, PAWN, WHITE,
 )
+from kungfu_chess.model.board import Board
 
 
-def is_valid_king_move(source: Position, dest: Position) -> bool:
-    dr = abs(dest.row - source.row)
-    dc = abs(dest.col - source.col)
-    return max(dr, dc) == 1
+def _sliding_destinations(board: Board, piece: Piece, directions: list) -> set:
+    """עזר — מחשב יעדים לכלי חולק (rook, bishop, queen)."""
+    destinations = set()
+    for dr, dc in directions:
+        row = piece.cell.row + dr
+        col = piece.cell.col + dc
+        while True:
+            pos = Position(row, col)
+            if not board.is_inside(pos):
+                break
+            target = board.get_piece_at(pos)
+            if target is None:
+                destinations.add(pos)
+            elif target.color != piece.color:
+                destinations.add(pos)  # capture — אבל עוצרים אחריו
+                break
+            else:
+                break  # friendly blocker — עוצרים לפניו
+            row += dr
+            col += dc
+    return destinations
 
 
-def is_valid_rook_move(source: Position, dest: Position) -> bool:
-    dr = abs(dest.row - source.row)
-    dc = abs(dest.col - source.col)
-    return (source.row == dest.row or source.col == dest.col) and (dr + dc > 0)
+def rook_destinations(board: Board, piece: Piece) -> set:
+    directions = [(0, 1), (0, -1), (1, 0), (-1, 0)]
+    return _sliding_destinations(board, piece, directions)
 
 
-def is_valid_bishop_move(source: Position, dest: Position) -> bool:
-    dr = abs(dest.row - source.row)
-    dc = abs(dest.col - source.col)
-    return dr == dc and dr > 0
+def bishop_destinations(board: Board, piece: Piece) -> set:
+    directions = [(1, 1), (1, -1), (-1, 1), (-1, -1)]
+    return _sliding_destinations(board, piece, directions)
 
 
-def is_valid_queen_move(source: Position, dest: Position) -> bool:
-    return is_valid_rook_move(source, dest) or is_valid_bishop_move(source, dest)
+def queen_destinations(board: Board, piece: Piece) -> set:
+    return rook_destinations(board, piece) | bishop_destinations(board, piece)
 
 
-def is_valid_knight_move(source: Position, dest: Position) -> bool:
-    dr = abs(dest.row - source.row)
-    dc = abs(dest.col - source.col)
-    return (dr == 2 and dc == 1) or (dr == 1 and dc == 2)
+def knight_destinations(board: Board, piece: Piece) -> set:
+    destinations = set()
+    jumps = [
+        (-2, -1), (-2, 1), (-1, -2), (-1, 2),
+        (1, -2), (1, 2), (2, -1), (2, 1),
+    ]
+    for dr, dc in jumps:
+        pos = Position(piece.cell.row + dr, piece.cell.col + dc)
+        if not board.is_inside(pos):
+            continue
+        target = board.get_piece_at(pos)
+        if target is None or target.color != piece.color:
+            destinations.add(pos)
+    return destinations
 
 
-def is_valid_pawn_move(source: Position, dest: Position, color: str,
-                       target_occupied: bool, board_rows: int) -> bool:
+def king_destinations(board: Board, piece: Piece) -> set:
+    destinations = set()
+    for dr in (-1, 0, 1):
+        for dc in (-1, 0, 1):
+            if dr == 0 and dc == 0:
+                continue
+            pos = Position(piece.cell.row + dr, piece.cell.col + dc)
+            if not board.is_inside(pos):
+                continue
+            target = board.get_piece_at(pos)
+            if target is None or target.color != piece.color:
+                destinations.add(pos)
+    return destinations
+
+
+def pawn_destinations(board: Board, piece: Piece) -> set:
     """
-    פאון — מורכב יותר כי תלוי בכיוון, שורת התחלה, ומצב היעד.
-    target_occupied: האם יש כלי אויב ביעד (לאכילה אלכסונית).
+    פאון — תנועה פשוטה:
+    - לבן עולה שורה אחת, שחור יורד שורה אחת
+    - אכילה אלכסונית צעד אחד קדימה
+    - אין two-step, אין en passant, אין promotion
     """
-    direction = -1 if color == WHITE else 1
-    start_row = board_rows - 1 if color == WHITE else 0
-    dr = dest.row - source.row
-    dc = dest.col - source.col
+    destinations = set()
+    direction = -1 if piece.color == WHITE else 1
 
     # תנועה ישרה
-    if dc == 0:
-        if dr == direction and not target_occupied:
-            return True
-        if dr == 2 * direction and source.row == start_row and not target_occupied:
-            return True
-        return False
+    forward = Position(piece.cell.row + direction, piece.cell.col)
+    if board.is_inside(forward) and board.get_piece_at(forward) is None:
+        destinations.add(forward)
 
     # אכילה אלכסונית
-    if abs(dc) == 1 and dr == direction:
-        return target_occupied
+    for dc in (-1, 1):
+        diag = Position(piece.cell.row + direction, piece.cell.col + dc)
+        if not board.is_inside(diag):
+            continue
+        target = board.get_piece_at(diag)
+        if target is not None and target.color != piece.color:
+            destinations.add(diag)
 
-    return False
+    return destinations
 
 
-def is_valid_move_shape(kind: str, color: str, source: Position, dest: Position,
-                        target_occupied: bool, board_rows: int) -> bool:
-    """
-    נקודת כניסה ראשית — בודקת צורת תנועה לפי סוג הכלי.
-    """
-    if kind == KING:
-        return is_valid_king_move(source, dest)
-    if kind == ROOK:
-        return is_valid_rook_move(source, dest)
-    if kind == BISHOP:
-        return is_valid_bishop_move(source, dest)
-    if kind == QUEEN:
-        return is_valid_queen_move(source, dest)
-    if kind == KNIGHT:
-        return is_valid_knight_move(source, dest)
-    if kind == PAWN:
-        return is_valid_pawn_move(source, dest, color, target_occupied, board_rows)
-    return False
+def legal_destinations(board: Board, piece: Piece) -> set:
+    """נקודת כניסה ראשית — מחזירה set[Position] של יעדים חוקיים."""
+    if piece.kind == ROOK:
+        return rook_destinations(board, piece)
+    if piece.kind == BISHOP:
+        return bishop_destinations(board, piece)
+    if piece.kind == QUEEN:
+        return queen_destinations(board, piece)
+    if piece.kind == KNIGHT:
+        return knight_destinations(board, piece)
+    if piece.kind == KING:
+        return king_destinations(board, piece)
+    if piece.kind == PAWN:
+        return pawn_destinations(board, piece)
+    return set()
