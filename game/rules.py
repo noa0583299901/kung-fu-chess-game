@@ -21,7 +21,7 @@ def is_legal_pawn_move(color, dr, dc, target, r1=None, rows=None):
             dr == 2 * direction
             and r1 is not None
             and rows is not None
-            and r1 == (rows - 2 if color == WHITE else 1)
+            and r1 == (rows - 1 if color == WHITE else 0)
             and target == EMPTY_CELL
         ):
             return True
