@@ -1,29 +1,4 @@
 # Git repo URL: https://github.com/noa0583299901/kung-fu-chess-game
-
-from game.parser import parse_input
-from game.board import validate_board
-from game.commands import process_commands
-
-
-def main():
-    lines = []
-    while True:
-        try:
-            lines.append(input().strip())
-        except EOFError:
-            break
-
-    board, command_lines = parse_input(lines)
-    if board is None:
-        return
-
-    valid, error = validate_board(board)
-    if not valid:
-        if error:
-            print(error)
-        return
-
-    process_commands(command_lines, board)
-
+from kungfu_chess.app import main
 
 main()
