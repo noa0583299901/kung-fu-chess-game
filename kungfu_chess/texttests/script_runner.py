@@ -27,10 +27,10 @@ def run_script(lines: list):
         return
 
     board, error = parse_board(board_lines)
-    if board is None:
-        return
     if error is not None:
         print(error)
+        return
+    if board is None:
         return
 
     engine = GameEngine(board)
