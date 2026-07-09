@@ -61,4 +61,4 @@ def run_commands(command_lines: list, engine: GameEngine, controller: Controller
 
         elif command == CMD_PRINT:
             if len(parts) == 2 and parts[1] == PRINT_BOARD_ARG:
-                print_board(engine.board)
+                print_board(engine.get_snapshot().board)
