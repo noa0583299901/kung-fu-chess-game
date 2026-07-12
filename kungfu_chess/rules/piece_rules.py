@@ -93,7 +93,7 @@ def pawn_destinations(board: Board, piece: Piece) -> set:
     """
     destinations = set()
     direction = -1 if piece.color == WHITE else 1
-    start_row = board.rows - 1 if piece.color == WHITE else 0
+    start_row = board.rows - 2 if piece.color == WHITE else 1
 
     # תנועה ישרה — צעד אחד
     forward = Position(piece.cell.row + direction, piece.cell.col)

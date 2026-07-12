@@ -238,10 +238,10 @@ class TestPawnDestinations:
         assert Position(3, 2) not in dests
 
     def test_pawn_double_move_from_start_row(self):
-        """Pawn can move 2 from start row (rows-1 for white)."""
+        """Pawn can move 2 from start row (rows-2 for white, 1 for black)."""
         board = Board(8, 8)
-        pawn = Piece(1, WHITE, PAWN, Position(7, 3))
+        pawn = Piece(1, WHITE, PAWN, Position(6, 3))
         board.add_piece(pawn)
         dests = legal_destinations(board, pawn)
+        assert Position(4, 3) in dests
         assert Position(5, 3) in dests
-        assert Position(6, 3) in dests
