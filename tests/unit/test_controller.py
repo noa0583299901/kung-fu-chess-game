@@ -17,10 +17,10 @@ class FakeGameEngine:
         self.board = board
         self.game_over = False
         self.motion_in_progress = False
-        self.move_requests = []  # list of (piece, destination)
+        self.move_requests = []  # list of (source, destination)
 
-    def request_move(self, piece, destination):
-        self.move_requests.append((piece, destination))
+    def request_move(self, source, destination):
+        self.move_requests.append((source, destination))
 
     def get_snapshot(self):
         return None
@@ -59,8 +59,8 @@ class TestControllerSelection:
         ctrl.handle_click(250, 50)  # second click at (0,2)
 
         assert len(engine.move_requests) == 1
-        piece, dest = engine.move_requests[0]
-        assert piece is rook
+        source, dest = engine.move_requests[0]
+        assert source == Position(0, 0)
         assert dest == Position(0, 2)
 
     def test_second_in_board_click_clears_selection(self):

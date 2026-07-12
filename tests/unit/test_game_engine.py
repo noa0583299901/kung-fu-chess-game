@@ -18,7 +18,7 @@ class TestGameEngineGuards:
         engine = GameEngine(board)
         engine.state.end_game(BLACK)
 
-        result = engine.request_move(rook, Position(0, 5))
+        result = engine.request_move(rook.cell, Position(0, 5))
         assert result.is_accepted is False
         assert result.reason == "game_over"
 
@@ -31,9 +31,9 @@ class TestGameEngineGuards:
         engine = GameEngine(board)
 
         # Start first motion
-        engine.request_move(rook, Position(0, 3))
+        engine.request_move(rook.cell, Position(0, 3))
         # Try second motion
-        result = engine.request_move(rook2, Position(7, 3))
+        result = engine.request_move(rook2.cell, Position(7, 3))
         assert result.is_accepted is False
         assert result.reason == "motion_in_progress"
 
@@ -45,7 +45,7 @@ class TestGameEngineGuards:
         engine = GameEngine(board)
         engine.state.end_game(BLACK)
 
-        result = engine.request_move(rook, Position(0, 5))
+        result = engine.request_move(rook.cell, Position(0, 5))
         assert result.reason == "game_over"
 
 
@@ -57,7 +57,7 @@ class TestGameEngineValidation:
         board.add_piece(rook)
         engine = GameEngine(board)
 
-        result = engine.request_move(rook, Position(0, 5))
+        result = engine.request_move(rook.cell, Position(0, 5))
         assert result.is_accepted is True
         assert result.reason == "ok"
 
@@ -67,8 +67,7 @@ class TestGameEngineValidation:
         board.add_piece(rook)
         engine = GameEngine(board)
 
-        # Diagonal — illegal for rook
-        result = engine.request_move(rook, Position(3, 3))
+        result = engine.request_move(rook.cell, Position(3, 3))
         assert result.is_accepted is False
         assert result.reason == "illegal_piece_move"
 
@@ -78,7 +77,7 @@ class TestGameEngineValidation:
         board.add_piece(rook)
         engine = GameEngine(board)
 
-        engine.request_move(rook, Position(3, 3))
+        engine.request_move(rook.cell, Position(3, 3))
         assert engine.motion_in_progress is False
 
     def test_invalid_move_does_not_mutate_board(self):
@@ -87,7 +86,7 @@ class TestGameEngineValidation:
         board.add_piece(rook)
         engine = GameEngine(board)
 
-        engine.request_move(rook, Position(3, 3))
+        engine.request_move(rook.cell, Position(3, 3))
         assert board.get_piece_at(Position(0, 0)) is rook
 
 
@@ -101,7 +100,7 @@ class TestGameEngineCapture:
         board.add_piece(enemy_pawn)
         engine = GameEngine(board)
 
-        engine.request_move(rook, Position(0, 3))
+        engine.request_move(rook.cell, Position(0, 3))
         engine.wait(3000)
 
         assert board.get_piece_at(Position(0, 3)) is rook
@@ -115,7 +114,7 @@ class TestGameEngineCapture:
         board.add_piece(enemy_king)
         engine = GameEngine(board)
 
-        engine.request_move(rook, Position(0, 3))
+        engine.request_move(rook.cell, Position(0, 3))
         engine.wait(3000)
 
         assert engine.game_over is True
@@ -131,10 +130,9 @@ class TestGameEngineCapture:
         board.add_piece(rook2)
         engine = GameEngine(board)
 
-        engine.request_move(rook, Position(0, 3))
+        engine.request_move(rook.cell, Position(0, 3))
         engine.wait(3000)
-        # Game over — next move rejected
-        result = engine.request_move(rook2, Position(7, 5))
+        result = engine.request_move(rook2.cell, Position(7, 5))
         assert result.is_accepted is False
         assert result.reason == "game_over"
 
@@ -147,7 +145,7 @@ class TestGameEngineWait:
         board.add_piece(rook)
         engine = GameEngine(board)
 
-        engine.request_move(rook, Position(0, 2))
+        engine.request_move(rook.cell, Position(0, 2))
         # Not enough time
         engine.wait(1000)
         # Piece still at source logically

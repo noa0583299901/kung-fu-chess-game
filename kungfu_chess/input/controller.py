@@ -57,11 +57,8 @@ class Controller:
             # click on empty cell: ignore
             return
 
-        # יש כלי נבחר (second click) — שולח request_move ומנקה selection
-        selected_piece = board.get_piece_at(self._selected_pos)
-
-        if selected_piece is not None:
-            self._engine.request_move(selected_piece, pos)
+        # יש כלי נבחר (second click) — שולח source + destination ומנקה selection
+        self._engine.request_move(self._selected_pos, pos)
 
         # Clear selection after every second in-board click
         self._selected_pos = None

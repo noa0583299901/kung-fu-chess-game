@@ -44,9 +44,10 @@ class GameEngine:
     def motion_in_progress(self) -> bool:
         return self._arbiter.has_active_motion
 
-    def request_move(self, piece: Piece, destination: Position) -> MoveResult:
+    def request_move(self, source: Position, destination: Position) -> MoveResult:
         """
         מנסה להפעיל מהלך.
+        API: request_move(source, destination) -> MoveResult
         סדר בדיקות: game-over → motion_in_progress → RuleEngine → start motion.
         """
         # game-over guard
@@ -58,9 +59,12 @@ class GameEngine:
             return MoveResult(False, "motion_in_progress")
 
         # validation דרך RuleEngine
-        validation = validate_move(self.board, piece.cell, destination)
+        validation = validate_move(self.board, source, destination)
         if not validation.is_valid:
             return MoveResult(False, validation.reason)
+
+        # מוצא את הכלי ב-source
+        piece = self.board.get_piece_at(source)
 
         # מפעיל תנועה
         self._arbiter.start_motion(piece, destination)
