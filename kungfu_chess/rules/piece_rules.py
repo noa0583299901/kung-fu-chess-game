@@ -85,18 +85,26 @@ def king_destinations(board: Board, piece: Piece) -> set:
 
 def pawn_destinations(board: Board, piece: Piece) -> set:
     """
-    פאון — תנועה פשוטה:
+    פאון:
     - לבן עולה שורה אחת, שחור יורד שורה אחת
+    - תנועה כפולה מהשורה ההתחלתית (rows-1 ללבן, 0 לשחור)
     - אכילה אלכסונית צעד אחד קדימה
-    - אין two-step, אין en passant, אין promotion
+    - אין en passant
     """
     destinations = set()
     direction = -1 if piece.color == WHITE else 1
+    start_row = board.rows - 1 if piece.color == WHITE else 0
 
-    # תנועה ישרה
+    # תנועה ישרה — צעד אחד
     forward = Position(piece.cell.row + direction, piece.cell.col)
     if board.is_inside(forward) and board.get_piece_at(forward) is None:
         destinations.add(forward)
+
+        # תנועה כפולה — רק מהשורה ההתחלתית ואם הצעד הראשון פנוי
+        if piece.cell.row == start_row:
+            double = Position(piece.cell.row + 2 * direction, piece.cell.col)
+            if board.is_inside(double) and board.get_piece_at(double) is None:
+                destinations.add(double)
 
     # אכילה אלכסונית
     for dc in (-1, 1):

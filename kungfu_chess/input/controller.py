@@ -57,8 +57,17 @@ class Controller:
             # click on empty cell: ignore
             return
 
-        # יש כלי נבחר (second click) — שולח source + destination ומנקה selection
-        self._engine.request_move(self._selected_pos, pos)
+        # יש כלי נבחר (second click)
+        selected_piece = board.get_piece_at(self._selected_pos)
+        target_piece = board.get_piece_at(pos)
 
-        # Clear selection after every second in-board click
+        # לחיצה על כלי אותו צבע — מחליפה בחירה
+        if (target_piece is not None
+                and selected_piece is not None
+                and target_piece.color == selected_piece.color):
+            self._selected_pos = pos
+            return
+
+        # שולח source + destination ומנקה selection
+        self._engine.request_move(self._selected_pos, pos)
         self._selected_pos = None

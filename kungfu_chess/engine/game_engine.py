@@ -10,7 +10,7 @@ Pattern: Application Service.
 from kungfu_chess.model.board import Board
 from kungfu_chess.model.game_state import GameState
 from kungfu_chess.model.position import Position
-from kungfu_chess.model.piece import Piece, KING
+from kungfu_chess.model.piece import Piece, KING, PAWN, QUEEN
 from kungfu_chess.rules.rule_engine import validate_move
 from kungfu_chess.realtime.real_time_arbiter import RealTimeArbiter, ArrivalEvent
 
@@ -85,9 +85,18 @@ class GameEngine:
         return event
 
     def _handle_arrival(self, event: ArrivalEvent):
-        """מטפל באירוע arrival — king-capture notification."""
+        """מטפל באירוע arrival — promotion, king-capture notification."""
+        piece = event.piece
+
+        # promotion — פאון שמגיע לשורה האחרונה הופך למלכה
+        if piece.kind == PAWN:
+            last_row = 0 if piece.color == "white" else self.board.rows - 1
+            if piece.cell.row == last_row:
+                piece.kind = QUEEN
+
+        # game-over
         if event.king_captured:
-            winner = event.piece.color
+            winner = piece.color
             self.state.end_game(winner)
 
     def get_snapshot(self) -> GameSnapshot:

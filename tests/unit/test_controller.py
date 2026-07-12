@@ -72,7 +72,7 @@ class TestControllerSelection:
         ctrl.handle_click(250, 50)  # second click
         assert ctrl.selected is None
 
-    def test_second_click_clears_selection_even_if_destination_is_same_color(self):
+    def test_second_click_on_same_color_switches_selection(self):
         board = Board(3, 3)
         rook = Piece(1, WHITE, ROOK, Position(0, 0))
         knight = Piece(2, WHITE, KING, Position(0, 2))
@@ -82,11 +82,11 @@ class TestControllerSelection:
         ctrl = Controller(engine)
 
         ctrl.handle_click(50, 50)   # select rook
-        ctrl.handle_click(250, 50)  # second click on friendly king
+        ctrl.handle_click(250, 50)  # click on friendly king — switches selection
 
-        # Still sends request_move — GameEngine will reject it
-        assert len(engine.move_requests) == 1
-        assert ctrl.selected is None
+        # No request_move sent — selection switched instead
+        assert len(engine.move_requests) == 0
+        assert ctrl.selected == Position(0, 2)
 
 
 class TestControllerOutsideBoard:
