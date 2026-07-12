@@ -49,9 +49,19 @@ class TestScriptParserEdgeCases:
         result = parse_script(["click 50 50", "print board"])
         assert result == (None, None)
 
-    def test_only_board_header_returns_none(self):
-        result = parse_script(["Board:", "wK ."])
-        assert result == (None, None)
+    def test_only_board_header_returns_board_and_empty_commands(self):
+        """Board: with rows but no Commands: — returns board lines + empty commands."""
+        board_lines, commands = parse_script(["Board:", "wK ."])
+        assert board_lines == ["wK ."]
+        assert commands == []
+
+    def test_format_without_commands_header(self):
+        """Board without Commands: — commands start at first click/wait/print."""
+        board_lines, commands = parse_script([
+            "Board", ". wR .", ". . .", "click 150 50", "print board"
+        ])
+        assert board_lines == [". wR .", ". . ."]
+        assert commands == ["click 150 50", "print board"]
 
 
 # --- script_runner.py ---
