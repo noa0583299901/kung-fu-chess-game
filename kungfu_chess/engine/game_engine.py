@@ -99,6 +99,16 @@ class GameEngine:
             winner = piece.color
             self.state.end_game(winner)
 
+    def jump(self, position: Position):
+        """
+        מסמן כלי כ-'defending' — אם כלי אחר מגיע לתא הזה, הכלי המגן אוכל אותו.
+        Extra route: airborne/collision behavior.
+        """
+        piece = self.board.get_piece_at(position)
+        if piece is not None:
+            from kungfu_chess.realtime.real_time_arbiter import DEFENDING
+            piece.state = DEFENDING
+
     def get_snapshot(self) -> GameSnapshot:
         """מחזיר snapshot read-only למצב הנוכחי."""
         return GameSnapshot(self.board, self.state.game_over, self.state.winner)

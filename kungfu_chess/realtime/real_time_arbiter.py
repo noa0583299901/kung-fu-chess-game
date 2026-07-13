@@ -6,6 +6,9 @@ real_time_arbiter.py — מנהל תנועות פעילות.
 """
 from kungfu_chess.model.board import Board
 from kungfu_chess.model.piece import Piece, KING, MOVING, IDLE
+
+# Piece states extended for jump/defend
+DEFENDING = "defending"
 from kungfu_chess.model.position import Position
 from kungfu_chess.realtime.motion import Motion, calculate_duration
 
@@ -56,7 +59,17 @@ class RealTimeArbiter:
         if not motion.finished:
             return None
 
-        # תנועה הסתיימה — מבצע את הצעד על הלוח
+        # תנועה הסתיימה — בדיקת collision עם כלי מגן
+        defender = board.get_piece_at(motion.destination)
+        if defender is not None and defender.state == DEFENDING:
+            # הכלי המגן אוכל את המגיע
+            board.remove_piece(motion.source)  # מסיר את הכלי הנע מהמקור
+            motion.piece.state = "captured"
+            defender.state = IDLE
+            self._active_motion = None
+            return ArrivalEvent(defender, motion.destination, motion.piece)
+
+        # arrival רגיל
         captured = board.move_piece(motion.source, motion.destination)
         motion.piece.state = IDLE
         self._active_motion = None

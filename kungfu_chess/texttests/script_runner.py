@@ -10,9 +10,11 @@ from kungfu_chess.io.board_parser import parse_board
 from kungfu_chess.io.board_printer import print_board
 from kungfu_chess.engine.game_engine import GameEngine
 from kungfu_chess.input.controller import Controller
+from kungfu_chess.input.board_mapper import pixel_to_position
 from kungfu_chess.texttests.script_parser import parse_script
 
 CMD_CLICK = "click"
+CMD_JUMP = "jump"
 CMD_WAIT = "wait"
 CMD_PRINT = "print"
 PRINT_BOARD_ARG = "board"
@@ -54,6 +56,12 @@ def run_commands(command_lines: list, engine: GameEngine, controller: Controller
             x = int(parts[1])
             y = int(parts[2])
             controller.handle_click(x, y)
+
+        elif command == CMD_JUMP:
+            x = int(parts[1])
+            y = int(parts[2])
+            pos = pixel_to_position(x, y)
+            engine.jump(pos)
 
         elif command == CMD_WAIT:
             milliseconds = int(parts[1])
