@@ -28,6 +28,7 @@ class ArrivalEvent:
 class RealTimeArbiter:
     def __init__(self):
         self._active_motion = None
+        self._jump_motion = None
 
     @property
     def has_active_motion(self) -> bool:
@@ -51,23 +52,44 @@ class RealTimeArbiter:
         אם לא סיימה — מחזיר None.
         """
         if self._active_motion is None:
+            # מקדם jump motion אם אין active motion
+            if self._jump_motion is not None:
+                self._jump_motion.advance(milliseconds)
+                if self._jump_motion.finished:
+                    self._jump_motion.piece.state = IDLE
+                    self._jump_motion = None
             return None
 
         motion = self._active_motion
         motion.advance(milliseconds)
 
         if not motion.finished:
+            # מקדם jump motion גם כשה-active לא סיימה
+            if self._jump_motion is not None:
+                self._jump_motion.advance(milliseconds)
+                if self._jump_motion.finished:
+                    self._jump_motion.piece.state = IDLE
+                    self._jump_motion = None
             return None
 
         # תנועה הסתיימה — בדיקת collision עם כלי מגן
+        # (בדיקה לפני שמסיימים את ה-jump motion)
         defender = board.get_piece_at(motion.destination)
         if defender is not None and defender.state == DEFENDING:
             # הכלי המגן אוכל את המגיע
-            board.remove_piece(motion.source)  # מסיר את הכלי הנע מהמקור
+            board.remove_piece(motion.source)
             motion.piece.state = "captured"
             defender.state = IDLE
             self._active_motion = None
+            self._jump_motion = None
             return ArrivalEvent(defender, motion.destination, motion.piece)
+
+        # מסיימים jump motion אם עדיין פעילה
+        if self._jump_motion is not None:
+            self._jump_motion.advance(milliseconds)
+            if self._jump_motion.finished:
+                self._jump_motion.piece.state = IDLE
+                self._jump_motion = None
 
         # arrival רגיל
         captured = board.move_piece(motion.source, motion.destination)

@@ -101,13 +101,18 @@ class GameEngine:
 
     def jump(self, position: Position):
         """
-        מסמן כלי כ-'defending' — אם כלי אחר מגיע לתא הזה, הכלי המגן אוכל אותו.
+        מסמן כלי כ-'defending' למשך תנועה של תא אחד (1000ms).
+        אחרי שה-duration עוברת, הכלי חוזר ל-IDLE.
         Extra route: airborne/collision behavior.
         """
         piece = self.board.get_piece_at(position)
         if piece is not None:
             from kungfu_chess.realtime.real_time_arbiter import DEFENDING
             piece.state = DEFENDING
+            # מפעיל motion לאותו תא — duration = 1000ms (one cell time)
+            from kungfu_chess.realtime.motion import MOVE_TIME_PER_CELL, Motion
+            motion = Motion(piece, position, position, MOVE_TIME_PER_CELL)
+            self._arbiter._jump_motion = motion
 
     def get_snapshot(self) -> GameSnapshot:
         """מחזיר snapshot read-only למצב הנוכחי."""
