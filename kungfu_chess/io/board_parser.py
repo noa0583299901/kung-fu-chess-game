@@ -10,8 +10,7 @@ from kungfu_chess.model.piece import (
     KING, QUEEN, ROOK, BISHOP, KNIGHT, PAWN,
 )
 from kungfu_chess.model.board import Board
-
-EMPTY_CELL = "."
+from kungfu_chess.constants import EMPTY_CELL, ERROR_ROW_WIDTH, ERROR_UNKNOWN_TOKEN
 
 # מיפוי אות לסוג כלי
 KIND_MAP = {
@@ -36,9 +35,7 @@ VALID_TOKENS = {
     "bK", "bQ", "bR", "bB", "bN", "bP",
 }
 
-# שגיאות
-ERROR_ROW_WIDTH = "ERROR ROW_WIDTH_MISMATCH"
-ERROR_UNKNOWN_TOKEN = "ERROR UNKNOWN_TOKEN"
+# שגיאות — מיובאות מ-constants
 
 
 def parse_board(board_lines: list) -> tuple:

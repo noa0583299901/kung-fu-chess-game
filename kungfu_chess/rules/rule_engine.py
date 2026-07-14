@@ -9,6 +9,13 @@ from kungfu_chess.model.position import Position
 from kungfu_chess.model.board import Board
 from kungfu_chess.model.piece import Piece
 from kungfu_chess.rules.piece_rules import legal_destinations
+from kungfu_chess.constants import (
+    REASON_OK,
+    REASON_OUTSIDE_BOARD,
+    REASON_EMPTY_SOURCE,
+    REASON_FRIENDLY_DESTINATION,
+    REASON_ILLEGAL_PIECE_MOVE,
+)
 
 
 class MoveValidation:
@@ -26,27 +33,22 @@ def validate_move(board: Board, source: Position, destination: Position) -> Move
     בודק אם מהלך מ-source ל-destination חוקי.
     לא משנה את ה-Board.
     """
-    # יעד מחוץ ללוח
     if not board.is_inside(destination):
-        return MoveValidation(False, "outside_board")
+        return MoveValidation(False, REASON_OUTSIDE_BOARD)
 
-    # מקור מחוץ ללוח
     if not board.is_inside(source):
-        return MoveValidation(False, "outside_board")
+        return MoveValidation(False, REASON_OUTSIDE_BOARD)
 
-    # מקור ריק
     piece = board.get_piece_at(source)
     if piece is None:
-        return MoveValidation(False, "empty_source")
+        return MoveValidation(False, REASON_EMPTY_SOURCE)
 
-    # יעד תפוס בכלי ידידותי
     target = board.get_piece_at(destination)
     if target is not None and target.color == piece.color:
-        return MoveValidation(False, "friendly_destination")
+        return MoveValidation(False, REASON_FRIENDLY_DESTINATION)
 
-    # שואלים את piece_rules אם היעד חוקי
     valid_dests = legal_destinations(board, piece)
     if destination not in valid_dests:
-        return MoveValidation(False, "illegal_piece_move")
+        return MoveValidation(False, REASON_ILLEGAL_PIECE_MOVE)
 
-    return MoveValidation(True, "ok")
+    return MoveValidation(True, REASON_OK)

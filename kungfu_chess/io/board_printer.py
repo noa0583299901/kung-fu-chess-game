@@ -11,7 +11,7 @@ from kungfu_chess.model.piece import (
     WHITE, BLACK,
     KING, QUEEN, ROOK, BISHOP, KNIGHT, PAWN,
 )
-from kungfu_chess.io.board_parser import EMPTY_CELL
+from kungfu_chess.constants import EMPTY_CELL
 
 # מיפוי הפוך — מסוג כלי לאות
 KIND_TO_LETTER = {

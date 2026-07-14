@@ -12,12 +12,7 @@ from kungfu_chess.engine.game_engine import GameEngine
 from kungfu_chess.input.controller import Controller
 from kungfu_chess.input.board_mapper import pixel_to_position
 from kungfu_chess.texttests.script_parser import parse_script
-
-CMD_CLICK = "click"
-CMD_JUMP = "jump"
-CMD_WAIT = "wait"
-CMD_PRINT = "print"
-PRINT_BOARD_ARG = "board"
+from kungfu_chess.constants import CMD_CLICK, CMD_JUMP, CMD_WAIT, CMD_PRINT, PRINT_BOARD_ARG
 
 
 def run_script(lines: list):

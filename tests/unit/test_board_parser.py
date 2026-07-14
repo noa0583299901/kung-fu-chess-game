@@ -3,7 +3,8 @@ Unit tests for BoardParser (iteration 0).
 Tests: rectangular parsing, token validation, inconsistent row rejection.
 """
 import pytest
-from kungfu_chess.io.board_parser import parse_board, ERROR_ROW_WIDTH, ERROR_UNKNOWN_TOKEN
+from kungfu_chess.io.board_parser import parse_board
+from kungfu_chess.constants import ERROR_ROW_WIDTH, ERROR_UNKNOWN_TOKEN
 from kungfu_chess.model.position import Position
 from kungfu_chess.model.piece import WHITE, BLACK, KING, ROOK, KNIGHT
 

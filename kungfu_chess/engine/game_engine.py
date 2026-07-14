@@ -14,6 +14,7 @@ from kungfu_chess.model.piece import Piece, KING, PAWN, QUEEN, WHITE, DEFENDING
 from kungfu_chess.rules.rule_engine import validate_move
 from kungfu_chess.realtime.real_time_arbiter import RealTimeArbiter, ArrivalEvent
 from kungfu_chess.realtime.motion import MOVE_TIME_PER_CELL, Motion
+from kungfu_chess.constants import REASON_OK, REASON_GAME_OVER, REASON_MOTION_IN_PROGRESS
 
 
 class MoveResult:
@@ -51,25 +52,19 @@ class GameEngine:
         API: request_move(source, destination) -> MoveResult
         סדר בדיקות: game-over → motion_in_progress → RuleEngine → start motion.
         """
-        # game-over guard
         if self.state.game_over:
-            return MoveResult(False, "game_over")
+            return MoveResult(False, REASON_GAME_OVER)
 
-        # common route: רק תנועה אחת בו-זמנית
         if self._arbiter.has_active_motion:
-            return MoveResult(False, "motion_in_progress")
+            return MoveResult(False, REASON_MOTION_IN_PROGRESS)
 
-        # validation דרך RuleEngine
         validation = validate_move(self.board, source, destination)
         if not validation.is_valid:
             return MoveResult(False, validation.reason)
 
-        # מוצא את הכלי ב-source
         piece = self.board.get_piece_at(source)
-
-        # מפעיל תנועה
         self._arbiter.start_motion(piece, destination)
-        return MoveResult(True, "ok")
+        return MoveResult(True, REASON_OK)
 
     def wait(self, milliseconds: int):
         """
@@ -89,13 +84,11 @@ class GameEngine:
         """מטפל באירוע arrival — promotion, king-capture notification."""
         piece = event.piece
 
-        # promotion — פאון שמגיע לשורה האחרונה הופך למלכה
         if piece.kind == PAWN:
             last_row = 0 if piece.color == WHITE else self.board.rows - 1
             if piece.cell.row == last_row:
                 piece.kind = QUEEN
 
-        # game-over
         if event.king_captured:
             winner = piece.color
             self.state.end_game(winner)
@@ -103,7 +96,6 @@ class GameEngine:
     def jump(self, position: Position):
         """
         מסמן כלי כ-'defending' למשך תנועה של תא אחד (1000ms).
-        אחרי שה-duration עוברת, הכלי חוזר ל-IDLE.
         Extra route: airborne/collision behavior.
         """
         piece = self.board.get_piece_at(position)
