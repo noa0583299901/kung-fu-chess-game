@@ -5,10 +5,7 @@ real_time_arbiter.py — מנהל תנועות פעילות.
 לא יודע על חוקי שחמט, clicks, rendering, או script parsing.
 """
 from kungfu_chess.model.board import Board
-from kungfu_chess.model.piece import Piece, KING, MOVING, IDLE
-
-# Piece states extended for jump/defend
-DEFENDING = "defending"
+from kungfu_chess.model.piece import Piece, KING, MOVING, IDLE, DEFENDING
 from kungfu_chess.model.position import Position
 from kungfu_chess.realtime.motion import Motion, calculate_duration
 
@@ -33,6 +30,10 @@ class RealTimeArbiter:
     @property
     def has_active_motion(self) -> bool:
         return self._active_motion is not None
+
+    def set_jump_motion(self, motion: Motion):
+        """מגדיר jump motion (defending state with timeout)."""
+        self._jump_motion = motion
 
     def start_motion(self, piece: Piece, destination: Position) -> Motion:
         """

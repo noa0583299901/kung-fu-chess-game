@@ -22,6 +22,7 @@ PAWN = "pawn"
 IDLE = "idle"
 MOVING = "moving"
 CAPTURED = "captured"
+DEFENDING = "defending"
 
 
 class Piece:

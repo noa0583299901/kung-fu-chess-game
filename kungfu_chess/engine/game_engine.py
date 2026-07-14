@@ -10,9 +10,10 @@ Pattern: Application Service.
 from kungfu_chess.model.board import Board
 from kungfu_chess.model.game_state import GameState
 from kungfu_chess.model.position import Position
-from kungfu_chess.model.piece import Piece, KING, PAWN, QUEEN
+from kungfu_chess.model.piece import Piece, KING, PAWN, QUEEN, WHITE, DEFENDING
 from kungfu_chess.rules.rule_engine import validate_move
 from kungfu_chess.realtime.real_time_arbiter import RealTimeArbiter, ArrivalEvent
+from kungfu_chess.realtime.motion import MOVE_TIME_PER_CELL, Motion
 
 
 class MoveResult:
@@ -90,7 +91,7 @@ class GameEngine:
 
         # promotion — פאון שמגיע לשורה האחרונה הופך למלכה
         if piece.kind == PAWN:
-            last_row = 0 if piece.color == "white" else self.board.rows - 1
+            last_row = 0 if piece.color == WHITE else self.board.rows - 1
             if piece.cell.row == last_row:
                 piece.kind = QUEEN
 
@@ -107,12 +108,9 @@ class GameEngine:
         """
         piece = self.board.get_piece_at(position)
         if piece is not None:
-            from kungfu_chess.realtime.real_time_arbiter import DEFENDING
             piece.state = DEFENDING
-            # מפעיל motion לאותו תא — duration = 1000ms (one cell time)
-            from kungfu_chess.realtime.motion import MOVE_TIME_PER_CELL, Motion
             motion = Motion(piece, position, position, MOVE_TIME_PER_CELL)
-            self._arbiter._jump_motion = motion
+            self._arbiter.set_jump_motion(motion)
 
     def get_snapshot(self) -> GameSnapshot:
         """מחזיר snapshot read-only למצב הנוכחי."""
