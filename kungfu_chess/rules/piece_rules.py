@@ -118,18 +118,20 @@ def pawn_destinations(board: Board, piece: Piece) -> set:
     return destinations
 
 
+# מילון מיפוי: סוג כלי → פונקציית יעדים (Strategy pattern)
+PIECE_DESTINATIONS = {
+    ROOK: rook_destinations,
+    BISHOP: bishop_destinations,
+    QUEEN: queen_destinations,
+    KNIGHT: knight_destinations,
+    KING: king_destinations,
+    PAWN: pawn_destinations,
+}
+
+
 def legal_destinations(board: Board, piece: Piece) -> set:
     """נקודת כניסה ראשית — מחזירה set[Position] של יעדים חוקיים."""
-    if piece.kind == ROOK:
-        return rook_destinations(board, piece)
-    if piece.kind == BISHOP:
-        return bishop_destinations(board, piece)
-    if piece.kind == QUEEN:
-        return queen_destinations(board, piece)
-    if piece.kind == KNIGHT:
-        return knight_destinations(board, piece)
-    if piece.kind == KING:
-        return king_destinations(board, piece)
-    if piece.kind == PAWN:
-        return pawn_destinations(board, piece)
-    return set()
+    rule_fn = PIECE_DESTINATIONS.get(piece.kind)
+    if rule_fn is None:
+        return set()
+    return rule_fn(board, piece)
