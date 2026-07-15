@@ -61,6 +61,12 @@ class Controller:
         selected_piece = board.get_piece_at(self._selected_pos)
         target_piece = board.get_piece_at(pos)
 
+        # double-click על אותו כלי — jump (קפיצה באוויר)
+        if pos == self._selected_pos:
+            self._engine.jump(pos)
+            self._selected_pos = None
+            return
+
         # לחיצה על כלי אותו צבע — מחליפה בחירה
         if (target_piece is not None
                 and selected_piece is not None

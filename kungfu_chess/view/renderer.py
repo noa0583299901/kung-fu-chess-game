@@ -191,13 +191,20 @@ class Renderer:
             if folder is None:
                 continue
 
-            anim = self._get_animation(folder, piece.state)
+            # כלי שקופץ (DEFENDING) — אנימציית jump + מוגבה
+            if piece.state == "defending":
+                anim = self._get_animation(folder, "jump")
+            else:
+                anim = self._get_animation(folder, piece.state)
             frame = anim.get_current_frame()
             if frame is None:
                 continue
 
             px = board_x_offset + piece.cell.col * render_cell
             py = board_y_offset + piece.cell.row * render_cell
+            # אם קופץ — מעלה 15px למעלה (אפקט "באוויר")
+            if piece.state == "defending":
+                py -= 15
             frame.draw_on(canvas, px, py)
 
         # --- Draw moving piece (interpolated) ---
