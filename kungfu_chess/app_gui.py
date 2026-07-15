@@ -112,16 +112,15 @@ def main(board_lines=None):
         if _mouse_click is not None:
             x, y = _mouse_click
             _mouse_click = None
-            # Adjust click position: subtract board offset
-            board_x = x - 160  # side_panel_width
-            board_y = y - 30   # top_bar_height
-            # Convert render pixels to logical pixels (render_cell=70, CELL_SIZE=100)
-            # Cell = board_x // 70, so logical_x = cell * 100 + 50 (center of cell)
+            board_x = x - 160
+            board_y = y - 30
             col = board_x // 70
             row = board_y // 70
             logical_x = col * CELL_SIZE + CELL_SIZE // 2
             logical_y = row * CELL_SIZE + CELL_SIZE // 2
+            print(f"[CLICK] pixel({x},{y}) col={col} row={row} sel={controller.selected}")
             controller.handle_click(logical_x, logical_y)
+            print(f"[AFTER] sel={controller.selected} motion={engine.motion_in_progress}")
 
         # --- Advance time ---
         current_time = time.time()

@@ -66,7 +66,7 @@ def knight_destinations(board: Board, piece: Piece) -> set:
         if not board.is_inside(pos):
             continue
         target = board.get_piece_at(pos)
-        if target is None or target.color != piece.color:
+        if target is None or target.color != piece.color or target.state == "defending":
             destinations.add(pos)
     return destinations
 
@@ -81,7 +81,7 @@ def king_destinations(board: Board, piece: Piece) -> set:
             if not board.is_inside(pos):
                 continue
             target = board.get_piece_at(pos)
-            if target is None or target.color != piece.color:
+            if target is None or target.color != piece.color or target.state == "defending":
                 destinations.add(pos)
     return destinations
 
@@ -100,13 +100,17 @@ def pawn_destinations(board: Board, piece: Piece) -> set:
 
     # תנועה ישרה — צעד אחד
     forward = Position(piece.cell.row + direction, piece.cell.col)
-    if board.is_inside(forward) and board.get_piece_at(forward) is None:
+    forward_piece = board.get_piece_at(forward)
+    forward_free = forward_piece is None or forward_piece.state == "defending"
+    if board.is_inside(forward) and forward_free:
         destinations.add(forward)
 
         # תנועה כפולה — רק מהשורה ההתחלתית ואם הצעד הראשון פנוי
         if piece.cell.row == start_row:
             double = Position(piece.cell.row + 2 * direction, piece.cell.col)
-            if board.is_inside(double) and board.get_piece_at(double) is None:
+            double_piece = board.get_piece_at(double)
+            double_free = double_piece is None or double_piece.state == "defending"
+            if board.is_inside(double) and double_free:
                 destinations.add(double)
 
     # אכילה אלכסונית
