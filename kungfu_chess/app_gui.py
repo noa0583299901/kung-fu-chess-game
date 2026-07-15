@@ -112,7 +112,10 @@ def main(board_lines=None):
         if _mouse_click is not None:
             x, y = _mouse_click
             _mouse_click = None
-            controller.handle_click(x, y)
+            # Adjust click position: subtract board offset (left panel + top bar)
+            board_x = x - 160  # side_panel_width
+            board_y = y - 30   # top_bar_height
+            controller.handle_click(board_x, board_y)
 
         # --- Advance time ---
         current_time = time.time()

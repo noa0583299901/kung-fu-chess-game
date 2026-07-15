@@ -120,41 +120,67 @@ class Renderer:
     def render_frame(self, snapshot, selected_pos=None, motion_info=None):
         """
         מצייר frame אחד של המשחק ומחזיר את ה-canvas.
-        snapshot: GameSnapshot
-        selected_pos: Position של הכלי הנבחר (או None)
-        motion_info: dict עם piece, source, destination, progress (או None)
-        Returns: Img (canvas מוכן להצגה)
+        Layout: [Black moves] [Board] [White moves]
+                Name top, Score+Name bottom
         """
+        import numpy as np
+
         board = snapshot.board
         board_width = board.cols * CELL_SIZE
         board_height = board.rows * CELL_SIZE
 
-        # יוצרים canvas רחב יותר — לוח + פאנל צדדי
-        panel_width = 200
-        total_width = board_width + panel_width
-        import numpy as np
-        canvas = Img()
-        canvas.img = np.ones((board_height, total_width, 4), dtype=np.uint8) * 40  # רקע כהה
+        # Panel dimensions
+        side_panel_width = 160
+        top_bar_height = 30
+        bottom_bar_height = 100
 
-        # טוען תמונת לוח ומציב על ה-canvas
+        total_width = side_panel_width + board_width + side_panel_width
+        total_height = top_bar_height + board_height + bottom_bar_height
+
+        # Create canvas
+        canvas = Img()
+        canvas.img = np.ones((total_height, total_width, 4), dtype=np.uint8) * 50
+
+        # --- Top bar: Black player name + score ---
+        canvas.put_text("Name: Chicko Miko", total_width // 2 - 70, 22, 0.5,
+                        color=(255, 255, 255, 255), thickness=1)
+        canvas.put_text(f"Score: {snapshot.black_score}",
+                        total_width // 2 + 80, 22, 0.5,
+                        color=(200, 200, 255, 255), thickness=1)
+
+        # --- Board ---
+        board_x_offset = side_panel_width
+        board_y_offset = top_bar_height
+
         board_img = Img().read(self._board_img_path,
                                size=(board_width, board_height))
-        board_img.draw_on(canvas, 0, 0)
+        board_img.draw_on(canvas, board_x_offset, board_y_offset)
 
-        # מצייר highlight על selected
+        # Column letters (a-h)
+        col_letters = "abcdefgh"
+        for c in range(min(board.cols, 8)):
+            cx = board_x_offset + c * CELL_SIZE + CELL_SIZE // 2 - 5
+            canvas.put_text(col_letters[c], cx, board_y_offset + board_height + 15, 0.4,
+                            color=(200, 200, 200, 255), thickness=1)
+
+        # Row numbers (8-1, top to bottom)
+        for r in range(min(board.rows, 8)):
+            ry = board_y_offset + r * CELL_SIZE + CELL_SIZE // 2 + 5
+            canvas.put_text(str(8 - r), board_x_offset - 15, ry, 0.4,
+                            color=(200, 200, 200, 255), thickness=1)
+
+        # --- Highlight selected ---
         if selected_pos is not None:
-            self._draw_highlight(canvas, selected_pos)
+            self._draw_highlight_offset(canvas, selected_pos, board_x_offset, board_y_offset)
 
-        # כלי שנמצא בתנועה — נצייר אותו בנפרד (interpolated)
+        # --- Draw pieces ---
         moving_piece_id = None
         if motion_info is not None:
             moving_piece_id = motion_info["piece"].id
 
-        # מצייר כלים
         for piece in board.all_pieces():
             if piece.state == CAPTURED:
                 continue
-            # אם הכלי בתנועה — מדלגים, נצייר אותו בנפרד
             if moving_piece_id is not None and piece.id == moving_piece_id:
                 continue
 
@@ -167,12 +193,11 @@ class Renderer:
             if frame is None:
                 continue
 
-            # מיקום פיקסל
-            px = piece.cell.col * CELL_SIZE
-            py = piece.cell.row * CELL_SIZE
+            px = board_x_offset + piece.cell.col * CELL_SIZE
+            py = board_y_offset + piece.cell.row * CELL_SIZE
             frame.draw_on(canvas, px, py)
 
-        # מצייר את הכלי הנע במיקום interpolated
+        # --- Draw moving piece (interpolated) ---
         if motion_info is not None:
             piece = motion_info["piece"]
             src = motion_info["source"]
@@ -184,45 +209,69 @@ class Renderer:
                 anim = self._get_animation(folder, MOVING)
                 frame = anim.get_current_frame()
                 if frame:
-                    # interpolation — מיקום ביניים
-                    px = int(src.col * CELL_SIZE + (dst.col - src.col) * CELL_SIZE * progress)
-                    py = int(src.row * CELL_SIZE + (dst.row - src.row) * CELL_SIZE * progress)
+                    px = int(board_x_offset + src.col * CELL_SIZE +
+                             (dst.col - src.col) * CELL_SIZE * progress)
+                    py = int(board_y_offset + src.row * CELL_SIZE +
+                             (dst.row - src.row) * CELL_SIZE * progress)
                     frame.draw_on(canvas, px, py)
 
-        # --- פאנל צדדי: score + moves log ---
-        panel_x = board_width + 10
+        # --- Left panel: Black moves ---
+        lx = 5
+        canvas.put_text("Black", lx + 20, top_bar_height + 20, 0.5,
+                        color=(180, 180, 255, 255), thickness=1)
+        canvas.put_text("Time   Move", lx, top_bar_height + 40, 0.35,
+                        color=(150, 150, 150, 255), thickness=1)
 
-        # Score
-        canvas.put_text("SCORE", panel_x, 30, 0.7,
-                        color=(255, 255, 255, 255), thickness=2)
-        canvas.put_text(f"White: {snapshot.white_score}", panel_x, 60, 0.5,
-                        color=(200, 200, 200, 255), thickness=1)
-        canvas.put_text(f"Black: {snapshot.black_score}", panel_x, 85, 0.5,
-                        color=(200, 200, 200, 255), thickness=1)
-
-        # Moves log
-        canvas.put_text("MOVES", panel_x, 120, 0.7,
-                        color=(255, 255, 255, 255), thickness=2)
-
-        # מציג את 15 המהלכים האחרונים
-        recent_moves = snapshot.moves_log[-15:]
-        for i, move in enumerate(recent_moves):
-            y_pos = 150 + i * 20
-            if y_pos > board_height - 20:
+        black_moves = [m for m in snapshot.moves_log if m.color == "black"]
+        for i, move in enumerate(black_moves[-20:]):
+            y_pos = top_bar_height + 60 + i * 16
+            if y_pos > top_bar_height + board_height - 10:
                 break
-            color = (180, 220, 180, 255) if move.color == WHITE else (180, 180, 220, 255)
-            canvas.put_text(str(move), panel_x, y_pos, 0.4,
-                            color=color, thickness=1)
+            canvas.put_text(f"{move.time_str()}  {move}", lx, y_pos, 0.33,
+                            color=(180, 180, 220, 255), thickness=1)
 
-        # game over message
+        # --- Right panel: White moves ---
+        rx = side_panel_width + board_width + 5
+        canvas.put_text("White", rx + 20, top_bar_height + 20, 0.5,
+                        color=(180, 255, 180, 255), thickness=1)
+        canvas.put_text("Time   Move", rx, top_bar_height + 40, 0.35,
+                        color=(150, 150, 150, 255), thickness=1)
+
+        white_moves = [m for m in snapshot.moves_log if m.color == "white"]
+        for i, move in enumerate(white_moves[-20:]):
+            y_pos = top_bar_height + 60 + i * 16
+            if y_pos > top_bar_height + board_height - 10:
+                break
+            canvas.put_text(f"{move.time_str()}  {move}", rx, y_pos, 0.33,
+                            color=(180, 220, 180, 255), thickness=1)
+
+        # --- Bottom bar: Score + White player name ---
+        score_y = top_bar_height + board_height + 25
+        canvas.put_text(f"Score: {snapshot.white_score}",
+                        total_width // 2 - 40, score_y, 0.6,
+                        color=(255, 255, 255, 255), thickness=2)
+        canvas.put_text("Name: Musti Shusti",
+                        total_width // 2 - 70, score_y + 30, 0.5,
+                        color=(255, 255, 255, 255), thickness=1)
+
+        # --- Game over ---
         if snapshot.game_over:
             winner = "White" if snapshot.winner == WHITE else "Black"
-            canvas.put_text(f"GAME OVER", board_width // 2 - 100, board_height // 2 - 20, 1.2,
+            cx = board_x_offset + board_width // 2 - 120
+            cy = board_y_offset + board_height // 2
+            canvas.put_text(f"GAME OVER - {winner} wins!",
+                            cx, cy, 0.9,
                             color=(0, 0, 255, 255), thickness=3)
-            canvas.put_text(f"{winner} wins!", board_width // 2 - 80, board_height // 2 + 20, 0.8,
-                            color=(0, 0, 255, 255), thickness=2)
 
         return canvas
+
+    def _draw_highlight_offset(self, canvas, pos, x_offset, y_offset):
+        """מצייר highlight עם offset."""
+        import cv2
+        x = x_offset + pos.col * CELL_SIZE
+        y = y_offset + pos.row * CELL_SIZE
+        cv2.rectangle(canvas.img, (x, y), (x + CELL_SIZE, y + CELL_SIZE),
+                      (0, 255, 0, 255), 3)
 
     def render(self, snapshot, selected_pos=None):
         """מצייר frame ומציג בחלון (לשימוש בודד בלי game loop)."""

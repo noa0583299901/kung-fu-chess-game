@@ -15,6 +15,10 @@ from kungfu_chess.rules.rule_engine import validate_move
 from kungfu_chess.realtime.real_time_arbiter import RealTimeArbiter, ArrivalEvent
 from kungfu_chess.realtime.motion import MOVE_TIME_PER_CELL, Motion
 from kungfu_chess.constants import REASON_OK, REASON_GAME_OVER, REASON_MOTION_IN_PROGRESS, PIECE_VALUES
+from kungfu_chess.engine.observer import (
+    GameObserver, PieceMovedEvent, PieceCapturedEvent, GameOverEvent
+)
+import time
 
 
 class MoveResult:
@@ -26,18 +30,25 @@ class MoveResult:
 
 class MoveLogEntry:
     """רשומה ב-moves log."""
-    def __init__(self, piece_kind: str, color: str, source: Position, destination: Position):
+    def __init__(self, piece_kind: str, color: str, source: Position, destination: Position, timestamp: float):
         self.piece_kind = piece_kind
         self.color = color
         self.source = source
         self.destination = destination
+        self.timestamp = timestamp  # seconds since game start
+
+    def time_str(self):
+        """מחזיר זמן בפורמט MM:SS.mmm"""
+        minutes = int(self.timestamp) // 60
+        seconds = self.timestamp % 60
+        return f"{minutes:02d}:{seconds:05.2f}"
 
     def __repr__(self):
-        col_letters = "abcdefghijklmnop"
-        color_prefix = "W" if self.color == "white" else "B"
-        src = f"{col_letters[self.source.col]}{self.source.row + 1}"
-        dst = f"{col_letters[self.destination.col]}{self.destination.row + 1}"
-        return f"{color_prefix}{self.piece_kind[0].upper()}{src}-{dst}"
+        col_letters = "abcdefgh"
+        src = f"{col_letters[self.source.col]}{8 - self.source.row}"
+        dst = f"{col_letters[self.destination.col]}{8 - self.destination.row}"
+        kind_letter = self.piece_kind[0].upper() if self.piece_kind != "pawn" else ""
+        return f"{kind_letter}{src}-{dst}"
 
 
 class GameSnapshot:
@@ -60,6 +71,24 @@ class GameEngine:
         self._white_score = 0
         self._black_score = 0
         self._moves_log = []
+        self._start_time = time.time()
+        self._observers = []
+
+    def add_observer(self, observer: GameObserver):
+        """רושם observer שיקבל הודעות על אירועי משחק."""
+        self._observers.append(observer)
+
+    def _notify_piece_moved(self, event: PieceMovedEvent):
+        for obs in self._observers:
+            obs.on_piece_moved(event)
+
+    def _notify_piece_captured(self, event: PieceCapturedEvent):
+        for obs in self._observers:
+            obs.on_piece_captured(event)
+
+    def _notify_game_over(self, event: GameOverEvent):
+        for obs in self._observers:
+            obs.on_game_over(event)
 
     @property
     def game_over(self) -> bool:
@@ -104,15 +133,21 @@ class GameEngine:
         return event
 
     def _handle_arrival(self, event: ArrivalEvent):
-        """מטפל באירוע arrival — log, score, promotion, king-capture."""
+        """מטפל באירוע arrival — log, score, promotion, king-capture, notify observers."""
         piece = event.piece
+        elapsed = time.time() - self._start_time
 
         # moves log
         self._moves_log.append(MoveLogEntry(
-            piece.kind, piece.color, event.destination, event.destination
+            piece.kind, piece.color, event.destination, event.destination, elapsed
         ))
 
-        # score — אם נאכל כלי, מוסיפים ניקוד לצד שאכל
+        # notify: piece moved
+        self._notify_piece_moved(PieceMovedEvent(
+            piece.kind, piece.color, event.destination, event.destination, elapsed
+        ))
+
+        # score + notify: capture
         if event.captured_piece is not None:
             value = PIECE_VALUES.get(event.captured_piece.kind, 0)
             if piece.color == WHITE:
@@ -120,16 +155,22 @@ class GameEngine:
             else:
                 self._black_score += value
 
+            self._notify_piece_captured(PieceCapturedEvent(
+                event.captured_piece.kind, event.captured_piece.color,
+                piece.color, value
+            ))
+
         # promotion
         if piece.kind == PAWN:
             last_row = 0 if piece.color == WHITE else self.board.rows - 1
             if piece.cell.row == last_row:
                 piece.kind = QUEEN
 
-        # game-over
+        # game-over + notify
         if event.king_captured:
             winner = piece.color
             self.state.end_game(winner)
+            self._notify_game_over(GameOverEvent(winner))
 
     def jump(self, position: Position):
         """
