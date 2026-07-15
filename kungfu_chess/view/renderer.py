@@ -176,6 +176,21 @@ class Renderer:
         if selected_pos is not None:
             self._draw_highlight_offset(canvas, selected_pos, board_x_offset, board_y_offset)
 
+        # --- Cooldown overlay (yellow fading) ---
+        import cv2
+        for piece in board.all_pieces():
+            if piece.state == "resting":
+                px = board_x_offset + piece.cell.col * render_cell
+                py = board_y_offset + piece.cell.row * render_cell
+                # חצי-שקוף צהוב שמתמעט עם הזמן
+                overlay = canvas.img[py:py+render_cell, px:px+render_cell].copy()
+                yellow = np.zeros((render_cell, render_cell, 4), dtype=np.uint8)
+                yellow[:, :] = (0, 255, 255, 80)  # צהוב חצי שקוף
+                alpha = yellow[:, :, 3:4] / 255.0
+                for c in range(3):
+                    overlay[:, :, c] = (1 - alpha[:, :, 0]) * overlay[:, :, c] + alpha[:, :, 0] * yellow[:, :, c]
+                canvas.img[py:py+render_cell, px:px+render_cell] = overlay
+
         # --- Draw pieces ---
         moving_piece_id = None
         if motion_info is not None:

@@ -10,11 +10,11 @@ Pattern: Application Service.
 from kungfu_chess.model.board import Board
 from kungfu_chess.model.game_state import GameState
 from kungfu_chess.model.position import Position
-from kungfu_chess.model.piece import Piece, KING, PAWN, QUEEN, WHITE, DEFENDING
+from kungfu_chess.model.piece import Piece, KING, PAWN, QUEEN, WHITE, DEFENDING, RESTING, IDLE
 from kungfu_chess.rules.rule_engine import validate_move
 from kungfu_chess.realtime.real_time_arbiter import RealTimeArbiter, ArrivalEvent
 from kungfu_chess.realtime.motion import MOVE_TIME_PER_CELL, Motion
-from kungfu_chess.constants import REASON_OK, REASON_GAME_OVER, REASON_MOTION_IN_PROGRESS, PIECE_VALUES
+from kungfu_chess.constants import REASON_OK, REASON_GAME_OVER, REASON_MOTION_IN_PROGRESS, PIECE_VALUES, COOLDOWN_DURATION_MS
 from kungfu_chess.engine.observer import (
     GameObserver, PieceMovedEvent, PieceCapturedEvent, GameOverEvent
 )
@@ -74,6 +74,7 @@ class GameEngine:
         self._moves_log = []
         self._start_time = None  # יאותחל בלחיצה הראשונה
         self._observers = []
+        self._resting_pieces = {}  # piece_id -> expire_time
         self._promotion_message = None  # (message, expire_time)
 
     def add_observer(self, observer: GameObserver):
@@ -117,6 +118,11 @@ class GameEngine:
             return MoveResult(False, validation.reason)
 
         piece = self.board.get_piece_at(source)
+
+        # כלי ב-cooldown לא יכול לנוע
+        if piece.state == RESTING:
+            return MoveResult(False, "cooldown")
+
         self._arbiter.start_motion(piece, destination)
 
         # מאתחל שעון בלחיצה הראשונה
@@ -128,9 +134,21 @@ class GameEngine:
     def wait(self, milliseconds: int):
         """
         מקדם זמן. אם תנועה מסתיימת — מטפל ב-arrival ו-king-capture.
+        גם בודק cooldown expiry.
         """
         if self.state.game_over:
             return None
+
+        # בודק cooldown expiry
+        now = time.time()
+        expired = [pid for pid, expire in self._resting_pieces.items() if now >= expire]
+        for pid in expired:
+            del self._resting_pieces[pid]
+            # מחזיר את הכלי ל-IDLE
+            for p in self.board.all_pieces():
+                if p.id == pid and p.state == RESTING:
+                    p.state = IDLE
+                    break
 
         event = self._arbiter.advance_time(milliseconds, self.board)
 
@@ -180,6 +198,10 @@ class GameEngine:
             winner = piece.color
             self.state.end_game(winner)
             self._notify_game_over(GameOverEvent(winner))
+
+        # cooldown — כלי עובר ל-RESTING
+        piece.state = RESTING
+        self._resting_pieces[piece.id] = time.time() + COOLDOWN_DURATION_MS / 1000.0
 
     def jump(self, position: Position):
         """

@@ -23,6 +23,7 @@ IDLE = "idle"
 MOVING = "moving"
 CAPTURED = "captured"
 DEFENDING = "defending"
+RESTING = "resting"
 
 
 class Piece:
