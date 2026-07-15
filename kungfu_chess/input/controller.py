@@ -52,9 +52,10 @@ class Controller:
         # אין כלי נבחר (first click)
         if self._selected_pos is None:
             piece_at_pos = board.get_piece_at(pos)
-            if piece_at_pos is not None:
+            # לא ניתן לבחור כלי שקופץ (DEFENDING)
+            if piece_at_pos is not None and piece_at_pos.state != "defending":
                 self._selected_pos = pos
-            # click on empty cell: ignore
+            # click on empty cell or defending piece: ignore
             return
 
         # יש כלי נבחר (second click)
@@ -67,10 +68,11 @@ class Controller:
             self._selected_pos = None
             return
 
-        # לחיצה על כלי אותו צבע — מחליפה בחירה
+        # לחיצה על כלי אותו צבע (שלא קופץ) — מחליפה בחירה
         if (target_piece is not None
                 and selected_piece is not None
-                and target_piece.color == selected_piece.color):
+                and target_piece.color == selected_piece.color
+                and target_piece.state != "defending"):
             self._selected_pos = pos
             return
 
