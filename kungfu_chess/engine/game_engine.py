@@ -189,7 +189,8 @@ class GameEngine:
         piece = self.board.get_piece_at(position)
         if piece is not None:
             piece.state = DEFENDING
-            motion = Motion(piece, position, position, MOVE_TIME_PER_CELL)
+            jump_duration = MOVE_TIME_PER_CELL * 3  # 3 שניות באוויר
+            motion = Motion(piece, position, position, jump_duration)
             self._arbiter.set_jump_motion(motion)
 
     def get_active_motion_info(self):
