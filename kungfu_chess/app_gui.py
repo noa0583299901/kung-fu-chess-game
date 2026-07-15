@@ -132,14 +132,19 @@ def main(board_lines=None):
         # --- Render ---
         snapshot = engine.get_snapshot()
         motion_info = engine.get_active_motion_info()
-        canvas = renderer.render_frame(snapshot, controller.selected, motion_info)
+        promotion_msg = engine.get_promotion_message()
+        canvas = renderer.render_frame(snapshot, controller.selected, motion_info, promotion_msg)
 
         cv2.imshow(window_name, canvas.img)
 
-        # --- Check quit ---
+        # --- Check quit / keyboard shortcuts ---
         key = cv2.waitKey(FRAME_DELAY_MS) & 0xFF
         if key == 27 or key == ord('q'):  # ESC or Q to quit
             break
+        elif key == ord('r'):  # R to reset
+            board, _ = parse_board(board_lines)
+            engine = GameEngine(board)
+            controller = Controller(engine)
 
     cv2.destroyAllWindows()
 

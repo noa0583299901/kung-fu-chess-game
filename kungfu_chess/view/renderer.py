@@ -117,7 +117,7 @@ class Renderer:
 
         return self._animations[key]
 
-    def render_frame(self, snapshot, selected_pos=None, motion_info=None):
+    def render_frame(self, snapshot, selected_pos=None, motion_info=None, promotion_msg=None):
         """
         מצייר frame אחד של המשחק ומחזיר את ה-canvas.
         Layout: [Black moves] [Board] [White moves]
@@ -209,7 +209,9 @@ class Renderer:
 
             folder = PIECE_FOLDER_MAP.get((piece.color, piece.kind))
             if folder:
-                anim = self._get_animation(folder, MOVING)
+                # פאונים משתמשים באנימציית jump, שאר הכלים ב-move
+                move_state = "jump" if piece.kind == "pawn" else MOVING
+                anim = self._get_animation(folder, move_state)
                 frame = anim.get_current_frame()
                 if frame:
                     px = int(board_x_offset + src.col * render_cell +
@@ -269,6 +271,13 @@ class Renderer:
             canvas.put_text(f"GAME OVER - {winner} wins!",
                             cx, cy, 0.9,
                             color=(0, 0, 255, 255), thickness=3)
+
+        # --- Promotion notification ---
+        if promotion_msg:
+            cx = board_x_offset + board_width // 2 - 100
+            cy = board_y_offset + 20
+            canvas.put_text(promotion_msg, cx, cy, 0.5,
+                            color=(0, 255, 255, 255), thickness=2)
 
         return canvas
 

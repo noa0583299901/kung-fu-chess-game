@@ -74,6 +74,7 @@ class GameEngine:
         self._moves_log = []
         self._start_time = None  # יאותחל בלחיצה הראשונה
         self._observers = []
+        self._promotion_message = None  # (message, expire_time)
 
     def add_observer(self, observer: GameObserver):
         """רושם observer שיקבל הודעות על אירועי משחק."""
@@ -171,6 +172,8 @@ class GameEngine:
             last_row = 0 if piece.color == WHITE else self.board.rows - 1
             if piece.cell.row == last_row:
                 piece.kind = QUEEN
+                color_name = "White" if piece.color == WHITE else "Black"
+                self._promotion_message = (f"{color_name} Pawn promoted to Queen!", time.time() + 3.0)
 
         # game-over + notify
         if event.king_captured:
@@ -192,6 +195,16 @@ class GameEngine:
     def get_active_motion_info(self):
         """מחזיר מידע על התנועה הפעילה (למטרות rendering interpolation)."""
         return self._arbiter.get_motion_info()
+
+    def get_promotion_message(self):
+        """מחזיר הודעת promotion אם עדיין פעילה, אחרת None."""
+        if self._promotion_message is None:
+            return None
+        msg, expire = self._promotion_message
+        if time.time() > expire:
+            self._promotion_message = None
+            return None
+        return msg
 
     def get_snapshot(self) -> GameSnapshot:
         """מחזיר snapshot read-only למצב הנוכחי."""
