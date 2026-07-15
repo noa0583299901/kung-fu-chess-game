@@ -31,6 +31,19 @@ class RealTimeArbiter:
     def has_active_motion(self) -> bool:
         return self._active_motion is not None
 
+    def get_motion_info(self):
+        """מחזיר מידע על התנועה הפעילה (למטרות rendering)."""
+        if self._active_motion is None:
+            return None
+        motion = self._active_motion
+        progress = motion.elapsed / motion.duration if motion.duration > 0 else 1.0
+        return {
+            "piece": motion.piece,
+            "source": motion.source,
+            "destination": motion.destination,
+            "progress": min(progress, 1.0),
+        }
+
     def set_jump_motion(self, motion: Motion):
         """מגדיר jump motion (defending state with timeout)."""
         self._jump_motion = motion

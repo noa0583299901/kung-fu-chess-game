@@ -14,7 +14,7 @@ from kungfu_chess.model.piece import Piece, KING, PAWN, QUEEN, WHITE, DEFENDING
 from kungfu_chess.rules.rule_engine import validate_move
 from kungfu_chess.realtime.real_time_arbiter import RealTimeArbiter, ArrivalEvent
 from kungfu_chess.realtime.motion import MOVE_TIME_PER_CELL, Motion
-from kungfu_chess.constants import REASON_OK, REASON_GAME_OVER, REASON_MOTION_IN_PROGRESS
+from kungfu_chess.constants import REASON_OK, REASON_GAME_OVER, REASON_MOTION_IN_PROGRESS, PIECE_VALUES
 
 
 class MoveResult:
@@ -24,12 +24,32 @@ class MoveResult:
         self.reason = reason
 
 
+class MoveLogEntry:
+    """רשומה ב-moves log."""
+    def __init__(self, piece_kind: str, color: str, source: Position, destination: Position):
+        self.piece_kind = piece_kind
+        self.color = color
+        self.source = source
+        self.destination = destination
+
+    def __repr__(self):
+        col_letters = "abcdefghijklmnop"
+        color_prefix = "W" if self.color == "white" else "B"
+        src = f"{col_letters[self.source.col]}{self.source.row + 1}"
+        dst = f"{col_letters[self.destination.col]}{self.destination.row + 1}"
+        return f"{color_prefix}{self.piece_kind[0].upper()}{src}-{dst}"
+
+
 class GameSnapshot:
     """Read-only view model / DTO עבור renderer ו-printer."""
-    def __init__(self, board: Board, game_over: bool, winner):
+    def __init__(self, board: Board, game_over: bool, winner,
+                 white_score: int, black_score: int, moves_log: list):
         self.board = board
         self.game_over = game_over
         self.winner = winner
+        self.white_score = white_score
+        self.black_score = black_score
+        self.moves_log = moves_log
 
 
 class GameEngine:
@@ -37,6 +57,9 @@ class GameEngine:
         self.board = board
         self.state = GameState()
         self._arbiter = RealTimeArbiter()
+        self._white_score = 0
+        self._black_score = 0
+        self._moves_log = []
 
     @property
     def game_over(self) -> bool:
@@ -81,14 +104,29 @@ class GameEngine:
         return event
 
     def _handle_arrival(self, event: ArrivalEvent):
-        """מטפל באירוע arrival — promotion, king-capture notification."""
+        """מטפל באירוע arrival — log, score, promotion, king-capture."""
         piece = event.piece
 
+        # moves log
+        self._moves_log.append(MoveLogEntry(
+            piece.kind, piece.color, event.destination, event.destination
+        ))
+
+        # score — אם נאכל כלי, מוסיפים ניקוד לצד שאכל
+        if event.captured_piece is not None:
+            value = PIECE_VALUES.get(event.captured_piece.kind, 0)
+            if piece.color == WHITE:
+                self._white_score += value
+            else:
+                self._black_score += value
+
+        # promotion
         if piece.kind == PAWN:
             last_row = 0 if piece.color == WHITE else self.board.rows - 1
             if piece.cell.row == last_row:
                 piece.kind = QUEEN
 
+        # game-over
         if event.king_captured:
             winner = piece.color
             self.state.end_game(winner)
@@ -104,6 +142,13 @@ class GameEngine:
             motion = Motion(piece, position, position, MOVE_TIME_PER_CELL)
             self._arbiter.set_jump_motion(motion)
 
+    def get_active_motion_info(self):
+        """מחזיר מידע על התנועה הפעילה (למטרות rendering interpolation)."""
+        return self._arbiter.get_motion_info()
+
     def get_snapshot(self) -> GameSnapshot:
         """מחזיר snapshot read-only למצב הנוכחי."""
-        return GameSnapshot(self.board, self.state.game_over, self.state.winner)
+        return GameSnapshot(
+            self.board, self.state.game_over, self.state.winner,
+            self._white_score, self._black_score, list(self._moves_log)
+        )
