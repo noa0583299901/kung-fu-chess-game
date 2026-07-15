@@ -209,9 +209,8 @@ class Renderer:
 
             folder = PIECE_FOLDER_MAP.get((piece.color, piece.kind))
             if folder:
-                # פאונים משתמשים באנימציית jump, שאר הכלים ב-move
-                move_state = "jump" if piece.kind == "pawn" else MOVING
-                anim = self._get_animation(folder, move_state)
+                # כל הכלים משתמשים באנימציית jump כשנעים
+                anim = self._get_animation(folder, "jump")
                 frame = anim.get_current_frame()
                 if frame:
                     px = int(board_x_offset + src.col * render_cell +
