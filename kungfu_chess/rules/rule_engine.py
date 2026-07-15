@@ -44,7 +44,7 @@ def validate_move(board: Board, source: Position, destination: Position) -> Move
         return MoveValidation(False, REASON_EMPTY_SOURCE)
 
     target = board.get_piece_at(destination)
-    if target is not None and target.color == piece.color:
+    if target is not None and target.color == piece.color and target.state != "defending":
         return MoveValidation(False, REASON_FRIENDLY_DESTINATION)
 
     valid_dests = legal_destinations(board, piece)

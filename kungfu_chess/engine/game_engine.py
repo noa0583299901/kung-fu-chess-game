@@ -183,7 +183,7 @@ class GameEngine:
 
     def jump(self, position: Position):
         """
-        מסמן כלי כ-'defending' למשך תנועה של תא אחד (1000ms).
+        מסמן כלי כ-'defending' למשך 3 שניות.
         Extra route: airborne/collision behavior.
         """
         piece = self.board.get_piece_at(position)
@@ -192,6 +192,16 @@ class GameEngine:
             jump_duration = MOVE_TIME_PER_CELL * 3  # 3 שניות באוויר
             motion = Motion(piece, position, position, jump_duration)
             self._arbiter.set_jump_motion(motion)
+
+            # מאתחל שעון אם צריך
+            if self._start_time is None:
+                self._start_time = time.time()
+
+            # מוסיף ל-log
+            elapsed = time.time() - self._start_time
+            self._moves_log.append(MoveLogEntry(
+                piece.kind, piece.color, position, position, elapsed
+            ))
 
     def get_active_motion_info(self):
         """מחזיר מידע על התנועה הפעילה (למטרות rendering interpolation)."""

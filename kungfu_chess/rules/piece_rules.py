@@ -28,8 +28,11 @@ def _sliding_destinations(board: Board, piece: Piece, directions: list) -> set:
             target = board.get_piece_at(pos)
             if target is None:
                 destinations.add(pos)
+            elif target.state == "defending":
+                # כלי קופץ — שקוף, ניתן לעבור דרכו ולהיכנס לתא שלו
+                destinations.add(pos)
             elif target.color != piece.color:
-                destinations.add(pos)  # capture — אבל עוצרים אחריו
+                destinations.add(pos)  # capture — עוצרים אחריו
                 break
             else:
                 break  # friendly blocker — עוצרים לפניו
