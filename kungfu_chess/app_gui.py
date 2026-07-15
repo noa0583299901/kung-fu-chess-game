@@ -126,7 +126,7 @@ def main(board_lines=None):
         elapsed_ms = int((current_time - last_time) * 1000)
         last_time = current_time
 
-        if elapsed_ms > 0 and engine.motion_in_progress:
+        if elapsed_ms > 0:
             engine.wait(elapsed_ms)
 
         # --- Render ---
