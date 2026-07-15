@@ -41,14 +41,15 @@ class MoveLogEntry:
         """מחזיר זמן בפורמט MM:SS.mmm"""
         minutes = int(self.timestamp) // 60
         seconds = self.timestamp % 60
-        return f"{minutes:02d}:{seconds:05.2f}"
+        millis = int((seconds % 1) * 1000)
+        return f"{minutes:02d}:{int(seconds):02d}.{millis:03d}"
 
     def __repr__(self):
         col_letters = "abcdefgh"
-        src = f"{col_letters[self.source.col]}{8 - self.source.row}"
-        dst = f"{col_letters[self.destination.col]}{8 - self.destination.row}"
+        dst_col = col_letters[self.destination.col] if self.destination.col < 8 else "?"
+        dst_row = str(8 - self.destination.row)
         kind_letter = self.piece_kind[0].upper() if self.piece_kind != "pawn" else ""
-        return f"{kind_letter}{src}-{dst}"
+        return f"{kind_letter}{dst_col}{dst_row}"
 
 
 class GameSnapshot:
@@ -71,7 +72,7 @@ class GameEngine:
         self._white_score = 0
         self._black_score = 0
         self._moves_log = []
-        self._start_time = time.time()
+        self._start_time = None  # יאותחל בלחיצה הראשונה
         self._observers = []
 
     def add_observer(self, observer: GameObserver):
@@ -116,6 +117,11 @@ class GameEngine:
 
         piece = self.board.get_piece_at(source)
         self._arbiter.start_motion(piece, destination)
+
+        # מאתחל שעון בלחיצה הראשונה
+        if self._start_time is None:
+            self._start_time = time.time()
+
         return MoveResult(True, REASON_OK)
 
     def wait(self, milliseconds: int):
@@ -135,7 +141,7 @@ class GameEngine:
     def _handle_arrival(self, event: ArrivalEvent):
         """מטפל באירוע arrival — log, score, promotion, king-capture, notify observers."""
         piece = event.piece
-        elapsed = time.time() - self._start_time
+        elapsed = time.time() - self._start_time if self._start_time else 0.0
 
         # moves log
         self._moves_log.append(MoveLogEntry(

@@ -60,7 +60,7 @@ class SpriteAnimation:
         for fname in frame_files:
             if fname.endswith(".png"):
                 path = os.path.join(sprites_path, fname)
-                sprite = Img().read(path, size=(CELL_SIZE, CELL_SIZE), keep_aspect=True)
+                sprite = Img().read(path, size=(70, 70), keep_aspect=True)
                 self.frames.append(sprite)
 
         self.current_frame = 0
@@ -126,13 +126,16 @@ class Renderer:
         import numpy as np
 
         board = snapshot.board
-        board_width = board.cols * CELL_SIZE
-        board_height = board.rows * CELL_SIZE
+
+        # גודל תא לציור — מותאם למסך (לא משנה את הלוגיקה)
+        render_cell = 70
+        board_width = board.cols * render_cell
+        board_height = board.rows * render_cell
 
         # Panel dimensions
         side_panel_width = 160
         top_bar_height = 30
-        bottom_bar_height = 100
+        bottom_bar_height = 60
 
         total_width = side_panel_width + board_width + side_panel_width
         total_height = top_bar_height + board_height + bottom_bar_height
@@ -141,7 +144,7 @@ class Renderer:
         canvas = Img()
         canvas.img = np.ones((total_height, total_width, 4), dtype=np.uint8) * 50
 
-        # --- Top bar: Black player name + score ---
+        # --- Top bar: player name + score ---
         canvas.put_text("Name: Chicko Miko", total_width // 2 - 70, 22, 0.5,
                         color=(255, 255, 255, 255), thickness=1)
         canvas.put_text(f"Score: {snapshot.black_score}",
@@ -159,13 +162,13 @@ class Renderer:
         # Column letters (a-h)
         col_letters = "abcdefgh"
         for c in range(min(board.cols, 8)):
-            cx = board_x_offset + c * CELL_SIZE + CELL_SIZE // 2 - 5
+            cx = board_x_offset + c * render_cell + render_cell // 2 - 5
             canvas.put_text(col_letters[c], cx, board_y_offset + board_height + 15, 0.4,
                             color=(200, 200, 200, 255), thickness=1)
 
         # Row numbers (8-1, top to bottom)
         for r in range(min(board.rows, 8)):
-            ry = board_y_offset + r * CELL_SIZE + CELL_SIZE // 2 + 5
+            ry = board_y_offset + r * render_cell + render_cell // 2 + 5
             canvas.put_text(str(8 - r), board_x_offset - 15, ry, 0.4,
                             color=(200, 200, 200, 255), thickness=1)
 
@@ -193,8 +196,8 @@ class Renderer:
             if frame is None:
                 continue
 
-            px = board_x_offset + piece.cell.col * CELL_SIZE
-            py = board_y_offset + piece.cell.row * CELL_SIZE
+            px = board_x_offset + piece.cell.col * render_cell
+            py = board_y_offset + piece.cell.row * render_cell
             frame.draw_on(canvas, px, py)
 
         # --- Draw moving piece (interpolated) ---
@@ -209,10 +212,10 @@ class Renderer:
                 anim = self._get_animation(folder, MOVING)
                 frame = anim.get_current_frame()
                 if frame:
-                    px = int(board_x_offset + src.col * CELL_SIZE +
-                             (dst.col - src.col) * CELL_SIZE * progress)
-                    py = int(board_y_offset + src.row * CELL_SIZE +
-                             (dst.row - src.row) * CELL_SIZE * progress)
+                    px = int(board_x_offset + src.col * render_cell +
+                             (dst.col - src.col) * render_cell * progress)
+                    py = int(board_y_offset + src.row * render_cell +
+                             (dst.row - src.row) * render_cell * progress)
                     frame.draw_on(canvas, px, py)
 
         # --- Left panel: Black moves ---
@@ -227,8 +230,10 @@ class Renderer:
             y_pos = top_bar_height + 60 + i * 16
             if y_pos > top_bar_height + board_height - 10:
                 break
-            canvas.put_text(f"{move.time_str()}  {move}", lx, y_pos, 0.33,
-                            color=(180, 180, 220, 255), thickness=1)
+            canvas.put_text(move.time_str(), lx, y_pos, 0.3,
+                            color=(150, 150, 200, 255), thickness=1)
+            canvas.put_text(str(move), lx + 80, y_pos, 0.3,
+                            color=(220, 220, 255, 255), thickness=1)
 
         # --- Right panel: White moves ---
         rx = side_panel_width + board_width + 5
@@ -242,8 +247,10 @@ class Renderer:
             y_pos = top_bar_height + 60 + i * 16
             if y_pos > top_bar_height + board_height - 10:
                 break
-            canvas.put_text(f"{move.time_str()}  {move}", rx, y_pos, 0.33,
-                            color=(180, 220, 180, 255), thickness=1)
+            canvas.put_text(move.time_str(), rx, y_pos, 0.3,
+                            color=(150, 200, 150, 255), thickness=1)
+            canvas.put_text(str(move), rx + 80, y_pos, 0.3,
+                            color=(220, 255, 220, 255), thickness=1)
 
         # --- Bottom bar: Score + White player name ---
         score_y = top_bar_height + board_height + 25
@@ -265,12 +272,12 @@ class Renderer:
 
         return canvas
 
-    def _draw_highlight_offset(self, canvas, pos, x_offset, y_offset):
+    def _draw_highlight_offset(self, canvas, pos, x_offset, y_offset, cell_size=70):
         """מצייר highlight עם offset."""
         import cv2
-        x = x_offset + pos.col * CELL_SIZE
-        y = y_offset + pos.row * CELL_SIZE
-        cv2.rectangle(canvas.img, (x, y), (x + CELL_SIZE, y + CELL_SIZE),
+        x = x_offset + pos.col * cell_size
+        y = y_offset + pos.row * cell_size
+        cv2.rectangle(canvas.img, (x, y), (x + cell_size, y + cell_size),
                       (0, 255, 0, 255), 3)
 
     def render(self, snapshot, selected_pos=None):

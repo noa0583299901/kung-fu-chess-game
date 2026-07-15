@@ -113,9 +113,13 @@ def main(board_lines=None):
             x, y = _mouse_click
             _mouse_click = None
             # Adjust click position: subtract board offset (left panel + top bar)
+            # Then divide by render_cell (70) to get cell position in pixels for controller
             board_x = x - 160  # side_panel_width
             board_y = y - 30   # top_bar_height
-            controller.handle_click(board_x, board_y)
+            # Convert from render pixels to logical pixels (CELL_SIZE=100)
+            logical_x = int(board_x * CELL_SIZE / 70)
+            logical_y = int(board_y * CELL_SIZE / 70)
+            controller.handle_click(logical_x, logical_y)
 
         # --- Advance time ---
         current_time = time.time()
