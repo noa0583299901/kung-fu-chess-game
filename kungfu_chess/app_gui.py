@@ -134,7 +134,8 @@ def main(board_lines=None):
         snapshot = engine.get_snapshot()
         motion_info = engine.get_active_motion_info()
         promotion_msg = engine.get_promotion_message()
-        canvas = renderer.render_frame(snapshot, controller.selected, motion_info, promotion_msg)
+        cooldown_info = engine.get_cooldown_info()
+        canvas = renderer.render_frame(snapshot, controller.selected, motion_info, promotion_msg, cooldown_info)
 
         cv2.imshow(window_name, canvas.img)
 

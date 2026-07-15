@@ -239,6 +239,18 @@ class GameEngine:
             return None
         return msg
 
+    def get_cooldown_info(self):
+        """מחזיר dict: piece_id -> progress (0.0=just started, 1.0=about to finish)."""
+        now = time.time()
+        info = {}
+        cooldown_sec = COOLDOWN_DURATION_MS / 1000.0
+        for pid, expire in self._resting_pieces.items():
+            remaining = expire - now
+            if remaining > 0:
+                progress = 1.0 - (remaining / cooldown_sec)  # 0=full yellow, 1=transparent
+                info[pid] = progress
+        return info
+
     def get_snapshot(self) -> GameSnapshot:
         """מחזיר snapshot read-only למצב הנוכחי."""
         return GameSnapshot(

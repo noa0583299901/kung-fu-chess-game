@@ -117,7 +117,7 @@ class Renderer:
 
         return self._animations[key]
 
-    def render_frame(self, snapshot, selected_pos=None, motion_info=None, promotion_msg=None):
+    def render_frame(self, snapshot, selected_pos=None, motion_info=None, promotion_msg=None, cooldown_info=None):
         """
         מצייר frame אחד של המשחק ומחזיר את ה-canvas.
         Layout: [Black moves] [Board] [White moves]
@@ -176,20 +176,31 @@ class Renderer:
         if selected_pos is not None:
             self._draw_highlight_offset(canvas, selected_pos, board_x_offset, board_y_offset)
 
-        # --- Cooldown overlay (yellow fading) ---
+        # --- Cooldown overlay (dark yellow fading out) ---
         import cv2
+        if cooldown_info is None:
+            cooldown_info = {}
         for piece in board.all_pieces():
-            if piece.state == "resting":
+            if piece.state == "resting" and piece.id in cooldown_info:
                 px = board_x_offset + piece.cell.col * render_cell
                 py = board_y_offset + piece.cell.row * render_cell
-                # חצי-שקוף צהוב שמתמעט עם הזמן
-                overlay = canvas.img[py:py+render_cell, px:px+render_cell].copy()
-                yellow = np.zeros((render_cell, render_cell, 4), dtype=np.uint8)
-                yellow[:, :] = (0, 255, 255, 80)  # צהוב חצי שקוף
-                alpha = yellow[:, :, 3:4] / 255.0
-                for c in range(3):
-                    overlay[:, :, c] = (1 - alpha[:, :, 0]) * overlay[:, :, c] + alpha[:, :, 0] * yellow[:, :, c]
-                canvas.img[py:py+render_cell, px:px+render_cell] = overlay
+                progress = cooldown_info[piece.id]  # 0=just started, 1=about to finish
+
+                # צהוב כהה — opacity יורד עם הזמן
+                # opacity: 180 בהתחלה → 0 בסוף
+                opacity = int(180 * (1.0 - progress))
+                if opacity > 0:
+                    # מצייר מלבן צהוב כהה חצי-שקוף
+                    # גובה המלבן יורד — "מתרוקן" מלמעלה למטה
+                    fill_height = int(render_cell * (1.0 - progress))
+                    if fill_height > 0:
+                        y_start = py + (render_cell - fill_height)
+                        overlay = canvas.img[y_start:y_start+fill_height, px:px+render_cell].copy()
+                        yellow = np.full((fill_height, render_cell, 4), (0, 180, 220, opacity), dtype=np.uint8)
+                        alpha = opacity / 255.0
+                        for c in range(3):
+                            overlay[:, :, c] = ((1 - alpha) * overlay[:, :, c] + alpha * yellow[:, :, c]).astype(np.uint8)
+                        canvas.img[y_start:y_start+fill_height, px:px+render_cell] = overlay
 
         # --- Draw pieces ---
         moving_piece_id = None
