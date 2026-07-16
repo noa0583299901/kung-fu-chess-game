@@ -203,14 +203,15 @@ class Renderer:
                         canvas.img[y_start:y_start+fill_height, px:px+render_cell] = overlay
 
         # --- Draw pieces ---
-        moving_piece_id = None
+        moving_piece_ids = set()
         if motion_info is not None:
-            moving_piece_id = motion_info["piece"].id
+            for mi in motion_info:
+                moving_piece_ids.add(mi["piece"].id)
 
         for piece in board.all_pieces():
             if piece.state == CAPTURED:
                 continue
-            if moving_piece_id is not None and piece.id == moving_piece_id:
+            if piece.id in moving_piece_ids:
                 continue
 
             folder = PIECE_FOLDER_MAP.get((piece.color, piece.kind))
@@ -233,24 +234,24 @@ class Renderer:
                 py -= 15
             frame.draw_on(canvas, px, py)
 
-        # --- Draw moving piece (interpolated) ---
+        # --- Draw moving pieces (interpolated) ---
         if motion_info is not None:
-            piece = motion_info["piece"]
-            src = motion_info["source"]
-            dst = motion_info["destination"]
-            progress = motion_info["progress"]
+            for mi in motion_info:
+                piece = mi["piece"]
+                src = mi["source"]
+                dst = mi["destination"]
+                progress = mi["progress"]
 
-            folder = PIECE_FOLDER_MAP.get((piece.color, piece.kind))
-            if folder:
-                # כל הכלים משתמשים באנימציית jump כשנעים
-                anim = self._get_animation(folder, "jump")
-                frame = anim.get_current_frame()
-                if frame:
-                    px = int(board_x_offset + src.col * render_cell +
-                             (dst.col - src.col) * render_cell * progress)
-                    py = int(board_y_offset + src.row * render_cell +
-                             (dst.row - src.row) * render_cell * progress)
-                    frame.draw_on(canvas, px, py)
+                folder = PIECE_FOLDER_MAP.get((piece.color, piece.kind))
+                if folder:
+                    anim = self._get_animation(folder, "jump")
+                    frame = anim.get_current_frame()
+                    if frame:
+                        px = int(board_x_offset + src.col * render_cell +
+                                 (dst.col - src.col) * render_cell * progress)
+                        py = int(board_y_offset + src.row * render_cell +
+                                 (dst.row - src.row) * render_cell * progress)
+                        frame.draw_on(canvas, px, py)
 
         # --- Left panel: Black moves ---
         lx = 5

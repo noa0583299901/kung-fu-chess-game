@@ -104,14 +104,11 @@ class GameEngine:
     def request_move(self, source: Position, destination: Position) -> MoveResult:
         """
         מנסה להפעיל מהלך.
-        API: request_move(source, destination) -> MoveResult
-        סדר בדיקות: game-over → motion_in_progress → RuleEngine → start motion.
+        Kung Fu Chess: מספר תנועות במקביל מותר.
+        מגביל: כלי ספציפי לא יכול לנוע אם הוא כבר בתנועה.
         """
         if self.state.game_over:
             return MoveResult(False, REASON_GAME_OVER)
-
-        if self._arbiter.has_active_motion:
-            return MoveResult(False, REASON_MOTION_IN_PROGRESS)
 
         validation = validate_move(self.board, source, destination)
         if not validation.is_valid:
@@ -122,6 +119,10 @@ class GameEngine:
         # כלי ב-cooldown לא יכול לנוע
         if piece.state == RESTING:
             return MoveResult(False, "cooldown")
+
+        # כלי שכבר בתנועה לא יכול לנוע שוב
+        if self._arbiter.is_piece_moving(piece.id):
+            return MoveResult(False, REASON_MOTION_IN_PROGRESS)
 
         self._arbiter.start_motion(piece, destination)
 
@@ -150,12 +151,13 @@ class GameEngine:
                     p.state = IDLE
                     break
 
-        event = self._arbiter.advance_time(milliseconds, self.board)
+        events = self._arbiter.advance_time(milliseconds, self.board)
 
-        if event is not None:
-            self._handle_arrival(event)
+        if events is not None:
+            for event in events:
+                self._handle_arrival(event)
 
-        return event
+        return events
 
     def _handle_arrival(self, event: ArrivalEvent):
         """מטפל באירוע arrival — log, score, promotion, king-capture, notify observers."""
@@ -226,7 +228,7 @@ class GameEngine:
             ))
 
     def get_active_motion_info(self):
-        """מחזיר מידע על התנועה הפעילה (למטרות rendering interpolation)."""
+        """מחזיר רשימת תנועות פעילות (למטרות rendering interpolation)."""
         return self._arbiter.get_motion_info()
 
     def get_promotion_message(self):

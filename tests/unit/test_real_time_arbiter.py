@@ -119,10 +119,11 @@ class TestArbiterCapture:
         arbiter = RealTimeArbiter()
 
         arbiter.start_motion(rook, Position(0, 3))
-        event = arbiter.advance_time(3000, board)
+        events = arbiter.advance_time(3000, board)
 
-        assert event is not None
-        assert event.captured_piece is enemy
+        assert events is not None
+        assert len(events) == 1
+        assert events[0].captured_piece is enemy
         assert enemy.state == CAPTURED
 
     def test_king_captured_flag(self):
@@ -134,9 +135,9 @@ class TestArbiterCapture:
         arbiter = RealTimeArbiter()
 
         arbiter.start_motion(rook, Position(0, 3))
-        event = arbiter.advance_time(3000, board)
+        events = arbiter.advance_time(3000, board)
 
-        assert event.king_captured is True
+        assert events[0].king_captured is True
 
     def test_non_king_capture_flag_false(self):
         board = Board(8, 8)
@@ -147,9 +148,9 @@ class TestArbiterCapture:
         arbiter = RealTimeArbiter()
 
         arbiter.start_motion(rook, Position(0, 3))
-        event = arbiter.advance_time(3000, board)
+        events = arbiter.advance_time(3000, board)
 
-        assert event.king_captured is False
+        assert events[0].king_captured is False
 
     def test_no_capture_on_empty_destination(self):
         board = Board(8, 8)
@@ -158,7 +159,7 @@ class TestArbiterCapture:
         arbiter = RealTimeArbiter()
 
         arbiter.start_motion(rook, Position(0, 3))
-        event = arbiter.advance_time(3000, board)
+        events = arbiter.advance_time(3000, board)
 
-        assert event.captured_piece is None
-        assert event.king_captured is False
+        assert events[0].captured_piece is None
+        assert events[0].king_captured is False

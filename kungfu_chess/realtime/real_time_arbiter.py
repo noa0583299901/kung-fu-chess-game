@@ -2,6 +2,7 @@
 שכבה: RealTimeArbiter
 real_time_arbiter.py — מנהל תנועות פעילות.
 מקדם elapsed time, מזהה arrival, ומדווח על capture events.
+תומך במספר תנועות במקביל (Kung Fu Chess).
 לא יודע על חוקי שחמט, clicks, rendering, או script parsing.
 """
 from kungfu_chess.model.board import Board
@@ -24,25 +25,32 @@ class ArrivalEvent:
 
 class RealTimeArbiter:
     def __init__(self):
-        self._active_motion = None
+        self._active_motions = []  # רשימה של Motion — מספר תנועות במקביל
         self._jump_motion = None
 
     @property
     def has_active_motion(self) -> bool:
-        return self._active_motion is not None
+        return len(self._active_motions) > 0
+
+    def is_piece_moving(self, piece_id: int) -> bool:
+        """בודק אם כלי ספציפי כבר בתנועה."""
+        return any(m.piece.id == piece_id for m in self._active_motions)
 
     def get_motion_info(self):
-        """מחזיר מידע על התנועה הפעילה (למטרות rendering)."""
-        if self._active_motion is None:
+        """מחזיר מידע על כל התנועות הפעילות (למטרות rendering)."""
+        if not self._active_motions:
             return None
-        motion = self._active_motion
-        progress = motion.elapsed / motion.duration if motion.duration > 0 else 1.0
-        return {
-            "piece": motion.piece,
-            "source": motion.source,
-            "destination": motion.destination,
-            "progress": min(progress, 1.0),
-        }
+        # מחזיר רשימה של כל התנועות
+        infos = []
+        for motion in self._active_motions:
+            progress = motion.elapsed / motion.duration if motion.duration > 0 else 1.0
+            infos.append({
+                "piece": motion.piece,
+                "source": motion.source,
+                "destination": motion.destination,
+                "progress": min(progress, 1.0),
+            })
+        return infos
 
     def set_jump_motion(self, motion: Motion):
         """מגדיר jump motion (defending state with timeout)."""
@@ -50,64 +58,59 @@ class RealTimeArbiter:
 
     def start_motion(self, piece: Piece, destination: Position) -> Motion:
         """
-        מתחיל תנועה חדשה. מחזיר את אובייקט ה-Motion.
-        Common route: רק תנועה אחת פעילה בו-זמנית.
+        מתחיל תנועה חדשה. מוסיף לרשימת התנועות הפעילות.
         """
         source = piece.cell
         duration = calculate_duration(piece, source, destination)
         motion = Motion(piece, source, destination, duration)
         piece.state = MOVING
-        self._active_motion = motion
+        self._active_motions.append(motion)
         return motion
 
     def advance_time(self, milliseconds: int, board: Board):
         """
-        מקדם את הזמן. אם תנועה מסתיימת — מבצע arrival ומחזיר ArrivalEvent.
-        אם לא סיימה — מחזיר None.
+        מקדם את הזמן לכל התנועות. מחזיר רשימת ArrivalEvents (או None).
         """
-        if self._active_motion is None:
-            # מקדם jump motion אם אין active motion
-            if self._jump_motion is not None:
-                self._jump_motion.advance(milliseconds)
-                if self._jump_motion.finished:
-                    self._jump_motion.piece.state = IDLE
-                    self._jump_motion = None
-            return None
-
-        motion = self._active_motion
-        motion.advance(milliseconds)
-
-        if not motion.finished:
-            # מקדם jump motion גם כשה-active לא סיימה
-            if self._jump_motion is not None:
-                self._jump_motion.advance(milliseconds)
-                if self._jump_motion.finished:
-                    self._jump_motion.piece.state = IDLE
-                    self._jump_motion = None
-            return None
-
-        # תנועה הסתיימה — בדיקת collision עם כלי מגן
-        # (בדיקה לפני שמסיימים את ה-jump motion)
-        defender = board.get_piece_at(motion.destination)
-        if defender is not None and defender.state == DEFENDING:
-            # הכלי המגן אוכל את המגיע
-            board.remove_piece(motion.source)
-            motion.piece.state = "captured"
-            defender.state = IDLE
-            self._active_motion = None
-            self._jump_motion = None
-            return ArrivalEvent(defender, motion.destination, motion.piece)
-
-        # מסיימים jump motion אם עדיין פעילה
+        # מקדם jump motion
         if self._jump_motion is not None:
             self._jump_motion.advance(milliseconds)
             if self._jump_motion.finished:
                 self._jump_motion.piece.state = IDLE
                 self._jump_motion = None
 
+        if not self._active_motions:
+            return None
+
+        # מקדם את כל התנועות
+        for motion in self._active_motions:
+            motion.advance(milliseconds)
+
+        # בודק מי הגיע
+        arrived = [m for m in self._active_motions if m.finished]
+        if not arrived:
+            return None
+
+        # מטפל בכל ה-arrivals
+        events = []
+        for motion in arrived:
+            self._active_motions.remove(motion)
+            event = self._resolve_arrival(motion, board)
+            if event is not None:
+                events.append(event)
+
+        return events if events else None
+
+    def _resolve_arrival(self, motion: Motion, board: Board):
+        """מטפל ב-arrival בודד — collision, capture, placement."""
+        # בדיקת collision עם כלי מגן
+        defender = board.get_piece_at(motion.destination)
+        if defender is not None and defender.state == DEFENDING:
+            board.remove_piece(motion.source)
+            motion.piece.state = "captured"
+            defender.state = IDLE
+            return ArrivalEvent(defender, motion.destination, motion.piece)
+
         # arrival רגיל
         captured = board.move_piece(motion.source, motion.destination)
         motion.piece.state = IDLE
-        self._active_motion = None
-
         return ArrivalEvent(motion.piece, motion.destination, captured)

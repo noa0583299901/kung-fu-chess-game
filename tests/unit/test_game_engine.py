@@ -22,18 +22,16 @@ class TestGameEngineGuards:
         assert result.is_accepted is False
         assert result.reason == "game_over"
 
-    def test_rejects_move_when_motion_in_progress(self):
+    def test_rejects_move_when_same_piece_already_moving(self):
         board = Board(8, 8)
         rook = Piece(1, WHITE, ROOK, Position(0, 0))
-        rook2 = Piece(2, WHITE, ROOK, Position(7, 0))
         board.add_piece(rook)
-        board.add_piece(rook2)
         engine = GameEngine(board)
 
         # Start first motion
         engine.request_move(rook.cell, Position(0, 3))
-        # Try second motion
-        result = engine.request_move(rook2.cell, Position(7, 3))
+        # Try to move same piece again
+        result = engine.request_move(Position(0, 0), Position(0, 5))
         assert result.is_accepted is False
         assert result.reason == "motion_in_progress"
 
