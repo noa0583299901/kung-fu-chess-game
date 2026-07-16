@@ -8,10 +8,16 @@ import os
 import json
 import time
 
+import cv2
+import numpy as np
+
 from kungfu_chess.view.img import Img
 from kungfu_chess.model.position import Position
 from kungfu_chess.model.piece import WHITE, BLACK, IDLE, MOVING, CAPTURED
 from kungfu_chess.input.board_mapper import CELL_SIZE
+from kungfu_chess.constants import (
+    RENDER_CELL_SIZE, SIDE_PANEL_WIDTH, TOP_BAR_HEIGHT, BOTTOM_BAR_HEIGHT,
+)
 
 
 # מיפוי (color, kind) -> שם תיקיית sprites
@@ -60,7 +66,7 @@ class SpriteAnimation:
         for fname in frame_files:
             if fname.endswith(".png"):
                 path = os.path.join(sprites_path, fname)
-                sprite = Img().read(path, size=(70, 70), keep_aspect=True)
+                sprite = Img().read(path, size=(RENDER_CELL_SIZE, RENDER_CELL_SIZE), keep_aspect=True)
                 self.frames.append(sprite)
 
         self.current_frame = 0
@@ -123,19 +129,17 @@ class Renderer:
         Layout: [Black moves] [Board] [White moves]
                 Name top, Score+Name bottom
         """
-        import numpy as np
-
         board = snapshot.board
 
-        # גודל תא לציור — מותאם למסך (לא משנה את הלוגיקה)
-        render_cell = 70
+        # גודל תא לציור
+        render_cell = RENDER_CELL_SIZE
         board_width = board.cols * render_cell
         board_height = board.rows * render_cell
 
         # Panel dimensions
-        side_panel_width = 160
-        top_bar_height = 30
-        bottom_bar_height = 60
+        side_panel_width = SIDE_PANEL_WIDTH
+        top_bar_height = TOP_BAR_HEIGHT
+        bottom_bar_height = BOTTOM_BAR_HEIGHT
 
         total_width = side_panel_width + board_width + side_panel_width
         total_height = top_bar_height + board_height + bottom_bar_height
@@ -177,7 +181,6 @@ class Renderer:
             self._draw_highlight_offset(canvas, selected_pos, board_x_offset, board_y_offset)
 
         # --- Cooldown overlay (dark yellow fading out) ---
-        import cv2
         if cooldown_info is None:
             cooldown_info = {}
         for piece in board.all_pieces():
@@ -314,9 +317,8 @@ class Renderer:
 
         return canvas
 
-    def _draw_highlight_offset(self, canvas, pos, x_offset, y_offset, cell_size=70):
+    def _draw_highlight_offset(self, canvas, pos, x_offset, y_offset, cell_size=RENDER_CELL_SIZE):
         """מצייר highlight עם offset."""
-        import cv2
         x = x_offset + pos.col * cell_size
         y = y_offset + pos.row * cell_size
         cv2.rectangle(canvas.img, (x, y), (x + cell_size, y + cell_size),

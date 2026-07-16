@@ -59,3 +59,11 @@ COOLDOWN_DURATION_MS = 2000
 # Cooldown after jump landing (milliseconds)
 # ---------------------------------------------------------------------------
 JUMP_COOLDOWN_MS = 1000
+
+# ---------------------------------------------------------------------------
+# Rendering layout constants
+# ---------------------------------------------------------------------------
+RENDER_CELL_SIZE = 70       # pixels per cell in GUI rendering
+SIDE_PANEL_WIDTH = 160      # pixels — moves log panels width
+TOP_BAR_HEIGHT = 30         # pixels — player name bar height
+BOTTOM_BAR_HEIGHT = 60      # pixels — score bar height
