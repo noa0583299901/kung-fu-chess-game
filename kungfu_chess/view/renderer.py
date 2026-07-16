@@ -98,12 +98,14 @@ class Renderer:
     לא משנה game state — read-only rendering.
     """
 
-    def __init__(self, assets_dir: str, board_image_path: str):
+    def __init__(self, assets_dir: str, board_image_path: str, idle_assets_dir: str = None):
         """
-        assets_dir: תיקיית pieces (e.g. CTD26/pieces1)
-        board_image_path: נתיב לתמונת הלוח (e.g. CTD26/board.png)
+        assets_dir: תיקיית pieces לתנועה/קפיצה (e.g. CTD26/pieces1)
+        board_image_path: נתיב לתמונת הלוח
+        idle_assets_dir: תיקיית pieces ל-idle (e.g. CTD26/pieces2). אם None = אותו כמו assets_dir.
         """
         self._assets_dir = assets_dir
+        self._idle_assets_dir = idle_assets_dir or assets_dir
         self._board_img_path = board_image_path
         self._animations = {}  # cache: (piece_folder, state) -> SpriteAnimation
 
@@ -113,12 +115,14 @@ class Renderer:
         key = (piece_folder, state_folder)
 
         if key not in self._animations:
-            sprites_dir = os.path.join(self._assets_dir, piece_folder, "states", state_folder)
+            # idle משתמש ב-idle_assets_dir, שאר ב-assets_dir
+            base_dir = self._idle_assets_dir if state_folder == "idle" else self._assets_dir
+            sprites_dir = os.path.join(base_dir, piece_folder, "states", state_folder)
             if os.path.exists(sprites_dir):
                 self._animations[key] = SpriteAnimation(sprites_dir)
             else:
                 # fallback to idle
-                idle_dir = os.path.join(self._assets_dir, piece_folder, "states", "idle")
+                idle_dir = os.path.join(self._idle_assets_dir, piece_folder, "states", "idle")
                 self._animations[key] = SpriteAnimation(idle_dir)
 
         return self._animations[key]
