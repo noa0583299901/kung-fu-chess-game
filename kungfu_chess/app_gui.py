@@ -52,7 +52,7 @@ def _mouse_callback(event, x, y, flags, param):
 # ===========================================================================
 
 def _find_assets_dir():
-    """מוצא את תיקיית ה-sprites לתנועה (pieces1)."""
+    """מוצא את תיקיית ה-sprites (pieces1)."""
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     ctd26_path = os.path.join(project_root, "CTD26", "pieces1")
     if os.path.exists(ctd26_path):
@@ -61,18 +61,6 @@ def _find_assets_dir():
     if os.path.exists(fallback):
         return fallback
     raise FileNotFoundError("Cannot find pieces1 assets directory")
-
-
-def _find_idle_assets_dir():
-    """מוצא את תיקיית ה-sprites ל-idle (pieces2 — אנימציית נשימה)."""
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    ctd26_path = os.path.join(project_root, "CTD26", "pieces2")
-    if os.path.exists(ctd26_path):
-        return ctd26_path
-    fallback = os.path.join(project_root, "pieces2")
-    if os.path.exists(fallback):
-        return fallback
-    return None  # fallback — ישתמש ב-assets_dir הרגיל
 
 
 def _find_board_image():
@@ -186,7 +174,7 @@ def main(board_lines=None):
     if engine is None:
         return
 
-    renderer = Renderer(_find_assets_dir(), _find_board_image(), _find_idle_assets_dir())
+    renderer = Renderer(_find_assets_dir(), _find_board_image())
     _game_loop(engine, controller, renderer, board_lines)
 
 

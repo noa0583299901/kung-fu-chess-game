@@ -7,6 +7,7 @@ renderer.py — מצייר את מצב המשחק על המסך.
 import os
 import json
 import time
+import math
 
 import cv2
 import numpy as np
@@ -98,16 +99,15 @@ class Renderer:
     לא משנה game state — read-only rendering.
     """
 
-    def __init__(self, assets_dir: str, board_image_path: str, idle_assets_dir: str = None):
+    def __init__(self, assets_dir: str, board_image_path: str):
         """
-        assets_dir: תיקיית pieces לתנועה/קפיצה (e.g. CTD26/pieces1)
+        assets_dir: תיקיית pieces (e.g. CTD26/pieces1)
         board_image_path: נתיב לתמונת הלוח
-        idle_assets_dir: תיקיית pieces ל-idle (e.g. CTD26/pieces2). אם None = אותו כמו assets_dir.
         """
         self._assets_dir = assets_dir
-        self._idle_assets_dir = idle_assets_dir or assets_dir
         self._board_img_path = board_image_path
         self._animations = {}  # cache: (piece_folder, state) -> SpriteAnimation
+        self._breath_start_time = time.time()  # לאפקט נשימה
 
     def _get_animation(self, piece_folder: str, state: str) -> SpriteAnimation:
         """מחזיר animation (cached) לפי כלי ומצב."""
@@ -115,14 +115,11 @@ class Renderer:
         key = (piece_folder, state_folder)
 
         if key not in self._animations:
-            # idle משתמש ב-idle_assets_dir, שאר ב-assets_dir
-            base_dir = self._idle_assets_dir if state_folder == "idle" else self._assets_dir
-            sprites_dir = os.path.join(base_dir, piece_folder, "states", state_folder)
+            sprites_dir = os.path.join(self._assets_dir, piece_folder, "states", state_folder)
             if os.path.exists(sprites_dir):
                 self._animations[key] = SpriteAnimation(sprites_dir)
             else:
-                # fallback to idle
-                idle_dir = os.path.join(self._idle_assets_dir, piece_folder, "states", "idle")
+                idle_dir = os.path.join(self._assets_dir, piece_folder, "states", "idle")
                 self._animations[key] = SpriteAnimation(idle_dir)
 
         return self._animations[key]
@@ -239,6 +236,10 @@ class Renderer:
             # אם קופץ — מעלה 15px למעלה (אפקט "באוויר")
             if piece.state == "defending":
                 py -= 15
+            # אפקט נשימה לכלים idle — scale קטן מעלה/מטה
+            elif piece.state == IDLE or piece.state == "resting":
+                breath_cycle = math.sin(time.time() * 3 + piece.id * 0.5) * 2
+                py += int(breath_cycle)
             frame.draw_on(canvas, px, py)
 
         # --- Draw moving pieces (interpolated) ---
