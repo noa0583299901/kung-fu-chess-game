@@ -52,8 +52,8 @@ def _remove_blue_text(sprite):
     if sprite.img is None or sprite.img.shape[2] < 4:
         return
     img = sprite.img
-    # BGRA — כחול בולט: B > 150, G < 100, R < 100
-    blue_mask = (img[:, :, 0] > 150) & (img[:, :, 1] < 100) & (img[:, :, 2] < 100)
+    # BGRA — כחול/תכלת בולט: B > 100, G < 180, R < 100
+    blue_mask = (img[:, :, 0] > 100) & (img[:, :, 1] < 180) & (img[:, :, 2] < 100)
     img[blue_mask, 3] = 0  # שקיפות מלאה
 
 
