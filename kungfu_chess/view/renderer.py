@@ -49,8 +49,11 @@ STATE_FOLDER_MAP = {
 
 def _remove_blue_text(sprite):
     """מסיר כיתוב כחול מה-sprite — הופך pixels כחולים בולטים לשקופים."""
-    if sprite.img is None or sprite.img.shape[2] < 4:
+    if sprite.img is None:
         return
+    # ממיר ל-4 ערוצים (BGRA) אם צריך
+    if len(sprite.img.shape) < 3 or sprite.img.shape[2] == 3:
+        sprite.img = cv2.cvtColor(sprite.img, cv2.COLOR_BGR2BGRA)
     img = sprite.img
     # BGRA — כחול/תכלת בולט: B > 100, G < 180, R < 100
     blue_mask = (img[:, :, 0] > 100) & (img[:, :, 1] < 180) & (img[:, :, 2] < 100)
