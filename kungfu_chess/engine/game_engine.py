@@ -18,6 +18,9 @@ from kungfu_chess.constants import REASON_OK, REASON_GAME_OVER, REASON_MOTION_IN
 from kungfu_chess.engine.observer import (
     GameObserver, PieceMovedEvent, PieceCapturedEvent, GameOverEvent
 )
+from kungfu_chess.rules.game_conditions import (
+    WinCondition, KingCaptureWin, PromotionRule, PawnToQueenPromotion
+)
 import time
 
 
@@ -65,17 +68,28 @@ class GameSnapshot:
 
 
 class GameEngine:
-    def __init__(self, board: Board):
+    def __init__(self, board: Board, arbiter=None, validate_move_fn=None,
+                 win_condition=None, promotion_rule=None):
+        """
+        Application Service — מקבל collaborators דרך DI.
+        arbiter: RealTimeArbiter instance (or None for default)
+        validate_move_fn: callable(board, source, dest) -> MoveValidation (or None for default)
+        win_condition: WinCondition strategy (or None for KingCaptureWin)
+        promotion_rule: PromotionRule strategy (or None for PawnToQueenPromotion)
+        """
         self.board = board
         self.state = GameState()
-        self._arbiter = RealTimeArbiter()
+        self._arbiter = arbiter or RealTimeArbiter()
+        self._validate_move = validate_move_fn or validate_move
+        self._win_condition = win_condition or KingCaptureWin()
+        self._promotion_rule = promotion_rule or PawnToQueenPromotion()
         self._white_score = 0
         self._black_score = 0
         self._moves_log = []
-        self._start_time = None  # יאותחל בלחיצה הראשונה
+        self._start_time = None
         self._observers = []
-        self._resting_pieces = {}  # piece_id -> expire_time
-        self._promotion_message = None  # (message, expire_time)
+        self._resting_pieces = {}
+        self._promotion_message = None
 
     def add_observer(self, observer: GameObserver):
         """רושם observer שיקבל הודעות על אירועי משחק."""
@@ -110,7 +124,7 @@ class GameEngine:
         if self.state.game_over:
             return MoveResult(False, REASON_GAME_OVER)
 
-        validation = validate_move(self.board, source, destination)
+        validation = self._validate_move(self.board, source, destination)
         if not validation.is_valid:
             return MoveResult(False, validation.reason)
 
@@ -192,19 +206,19 @@ class GameEngine:
                 piece.color, value
             ))
 
-        # promotion
-        if piece.kind == PAWN:
-            last_row = 0 if piece.color == WHITE else self.board.rows - 1
-            if piece.cell.row == last_row:
-                piece.kind = QUEEN
-                color_name = "White" if piece.color == WHITE else "Black"
-                self._promotion_message = (f"{color_name} Pawn promoted to Queen!", time.time() + 3.0)
+        # promotion — דרך PromotionRule strategy
+        new_kind = self._promotion_rule.check(piece, self.board.rows)
+        if new_kind is not None:
+            piece.kind = new_kind
+            color_name = "White" if piece.color == WHITE else "Black"
+            self._promotion_message = (f"{color_name} Pawn promoted to Queen!", time.time() + 3.0)
 
-        # game-over + notify
-        if event.king_captured:
-            winner = piece.color
-            self.state.end_game(winner)
-            self._notify_game_over(GameOverEvent(winner))
+        # game-over — דרך WinCondition strategy
+        if event.captured_piece is not None:
+            winner = self._win_condition.check(event.captured_piece, piece)
+            if winner is not None:
+                self.state.end_game(winner)
+                self._notify_game_over(GameOverEvent(winner))
 
         # cooldown — כלי עובר ל-RESTING
         piece.state = RESTING
