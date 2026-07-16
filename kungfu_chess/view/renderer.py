@@ -47,6 +47,16 @@ STATE_FOLDER_MAP = {
 }
 
 
+def _remove_blue_text(sprite):
+    """מסיר כיתוב כחול מה-sprite — הופך pixels כחולים בולטים לשקופים."""
+    if sprite.img is None or sprite.img.shape[2] < 4:
+        return
+    img = sprite.img
+    # BGRA — כחול בולט: B > 150, G < 100, R < 100
+    blue_mask = (img[:, :, 0] > 150) & (img[:, :, 1] < 100) & (img[:, :, 2] < 100)
+    img[blue_mask, 3] = 0  # שקיפות מלאה
+
+
 class SpriteAnimation:
     """מנהל אנימציה של sprite — מחליף פריימים לפי FPS."""
 
@@ -68,6 +78,8 @@ class SpriteAnimation:
             if fname.endswith(".png"):
                 path = os.path.join(sprites_path, fname)
                 sprite = Img().read(path, size=(RENDER_CELL_SIZE, RENDER_CELL_SIZE), keep_aspect=True)
+                # מסיר כיתוב כחול — הופך pixels כחולים לשקופים
+                _remove_blue_text(sprite)
                 self.frames.append(sprite)
 
         self.current_frame = 0
