@@ -75,7 +75,7 @@ class RealTimeArbiter:
         if self._jump_motion is not None:
             self._jump_motion.advance(milliseconds)
             if self._jump_motion.finished:
-                self._jump_motion.piece.state = IDLE
+                self._jump_motion.piece.state = "resting"  # מנוחה אחרי נחיתה
                 self._jump_motion = None
 
         if not self._active_motions:

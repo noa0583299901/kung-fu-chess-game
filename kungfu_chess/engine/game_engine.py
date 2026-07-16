@@ -14,7 +14,7 @@ from kungfu_chess.model.piece import Piece, KING, PAWN, QUEEN, WHITE, DEFENDING,
 from kungfu_chess.rules.rule_engine import validate_move
 from kungfu_chess.realtime.real_time_arbiter import RealTimeArbiter, ArrivalEvent
 from kungfu_chess.realtime.motion import MOVE_TIME_PER_CELL, Motion
-from kungfu_chess.constants import REASON_OK, REASON_GAME_OVER, REASON_MOTION_IN_PROGRESS, PIECE_VALUES, COOLDOWN_DURATION_MS
+from kungfu_chess.constants import REASON_OK, REASON_GAME_OVER, REASON_MOTION_IN_PROGRESS, PIECE_VALUES, COOLDOWN_DURATION_MS, JUMP_COOLDOWN_MS
 from kungfu_chess.engine.observer import (
     GameObserver, PieceMovedEvent, PieceCapturedEvent, GameOverEvent
 )
@@ -150,6 +150,11 @@ class GameEngine:
                 if p.id == pid and p.state == RESTING:
                     p.state = IDLE
                     break
+
+        # בודק כלים שנחתו מ-jump ונכנסו ל-resting (הArbiter שינה אותם)
+        for p in self.board.all_pieces():
+            if p.state == RESTING and p.id not in self._resting_pieces:
+                self._resting_pieces[p.id] = now + JUMP_COOLDOWN_MS / 1000.0
 
         events = self._arbiter.advance_time(milliseconds, self.board)
 
