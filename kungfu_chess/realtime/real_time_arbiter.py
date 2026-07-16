@@ -90,8 +90,14 @@ class RealTimeArbiter:
         if not arrived:
             return None
 
-        # ממיין: מי שצבר יותר elapsed time (= התחיל לנוע קודם) מגיע ראשון
-        arrived.sort(key=lambda m: m.elapsed, reverse=True)
+        # בודק מי הגיע
+        arrived = [m for m in self._active_motions if m.finished]
+        if not arrived:
+            return None
+
+        # ממיין: כלי שהגיע "מוקדם" (התחיל מזמן = duration ארוך) קודם ברשימה
+        # כלי שהגיע "מאוחר" (duration קצר / התחיל מאוחר) מעובד אחרון — הוא שאוכל
+        arrived.sort(key=lambda m: m.duration, reverse=True)
 
         # מטפל בכל ה-arrivals
         events = []
@@ -100,18 +106,14 @@ class RealTimeArbiter:
         for motion in arrived:
             self._active_motions.remove(motion)
 
-            # בדיקה: האם תא היעד כבר נתפס ב-arrival אחר בframe הזה?
-            if motion.destination in occupied_destinations:
-                # collision — כלי חוזר למקומו
-                motion.piece.state = IDLE
-                continue
-
-            # בדיקה: האם כלי אחר (שהגיע קודם) כבר נמצא ביעד?
+            # בדיקה: אם תא היעד כבר נתפס ב-arrival אחר בframe + אותו צבע
             existing = board.get_piece_at(motion.destination)
-            if existing is not None and existing.color == motion.piece.color and existing.state != DEFENDING:
-                # אותו צבע — כלי חוזר למקומו
-                motion.piece.state = IDLE
-                continue
+            if motion.destination in occupied_destinations:
+                if existing is not None and existing.color == motion.piece.color:
+                    # אותו צבע — כלי חוזר למקומו
+                    motion.piece.state = IDLE
+                    continue
+                # אויב שהגיע קודם — המגיע מאוחר אוכל אותו (כלל 1!)
 
             event = self._resolve_arrival(motion, board)
             if event is not None:
@@ -122,7 +124,7 @@ class RealTimeArbiter:
 
     def _resolve_arrival(self, motion: Motion, board: Board):
         """מטפל ב-arrival בודד — collision, capture, placement."""
-        # בדיקת collision עם כלי מגן
+        # בדיקת collision עם כלי מגן (DEFENDING)
         defender = board.get_piece_at(motion.destination)
         if defender is not None and defender.state == DEFENDING:
             board.remove_piece(motion.source)
@@ -130,7 +132,13 @@ class RealTimeArbiter:
             defender.state = IDLE
             return ArrivalEvent(defender, motion.destination, motion.piece)
 
-        # arrival רגיל
+        # בדיקה: תא תפוס בכלי ידידותי (שנוחת תוך כדי) — חוזר למקום
+        existing = board.get_piece_at(motion.destination)
+        if existing is not None and existing.color == motion.piece.color:
+            motion.piece.state = IDLE
+            return None
+
+        # arrival רגיל (תא ריק או אויב — capture)
         captured = board.move_piece(motion.source, motion.destination)
         motion.piece.state = IDLE
         return ArrivalEvent(motion.piece, motion.destination, captured)
