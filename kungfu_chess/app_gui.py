@@ -101,7 +101,8 @@ def main(board_lines=None):
 
     # --- חלון OpenCV ---
     window_name = "Kung Fu Chess"
-    cv2.namedWindow(window_name)
+    cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+    cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
     cv2.setMouseCallback(window_name, _mouse_callback)
 
     # --- Game loop ---

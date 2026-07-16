@@ -85,18 +85,38 @@ class RealTimeArbiter:
         for motion in self._active_motions:
             motion.advance(milliseconds)
 
-        # בודק מי הגיע
+        # בודק מי הגיע — ממוין לפי מי שהתחיל קודם (elapsed גבוה = התחיל מוקדם יותר)
         arrived = [m for m in self._active_motions if m.finished]
         if not arrived:
             return None
 
+        # ממיין: מי שצבר יותר elapsed time (= התחיל לנוע קודם) מגיע ראשון
+        arrived.sort(key=lambda m: m.elapsed, reverse=True)
+
         # מטפל בכל ה-arrivals
         events = []
+        occupied_destinations = set()  # תאים שכבר נתפסו ב-frame הזה
+
         for motion in arrived:
             self._active_motions.remove(motion)
+
+            # בדיקה: האם תא היעד כבר נתפס ב-arrival אחר בframe הזה?
+            if motion.destination in occupied_destinations:
+                # collision — כלי חוזר למקומו
+                motion.piece.state = IDLE
+                continue
+
+            # בדיקה: האם כלי אחר (שהגיע קודם) כבר נמצא ביעד?
+            existing = board.get_piece_at(motion.destination)
+            if existing is not None and existing.color == motion.piece.color and existing.state != DEFENDING:
+                # אותו צבע — כלי חוזר למקומו
+                motion.piece.state = IDLE
+                continue
+
             event = self._resolve_arrival(motion, board)
             if event is not None:
                 events.append(event)
+                occupied_destinations.add(motion.destination)
 
         return events if events else None
 
