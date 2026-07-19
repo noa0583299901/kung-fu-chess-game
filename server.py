@@ -24,6 +24,7 @@ from kungfu_chess.engine.game_engine import GameEngine
 from kungfu_chess.engine.event_bus import EventBus
 from kungfu_chess.model.position import Position
 from kungfu_chess.model.piece import WHITE, BLACK
+from database import Database
 
 # --- הגדרות ---
 HOST = "localhost"
@@ -41,10 +42,11 @@ DEFAULT_BOARD = [
 ]
 
 # --- שחקנים מחוברים ---
-players = {}  # websocket -> {"color": ..., "name": ...}
+players = {}  # websocket -> {"color": ..., "name": ..., "username": ...}
 engine = None
 bus = None
 game_start_time = None
+db = Database()
 
 
 # ===========================================================================
@@ -112,29 +114,56 @@ async def handle_client(websocket):
     """מטפל בחיבור של client חדש."""
     global game_start_time
 
-    # מחכה להודעת login עם שם
+    # מחכה להודעת login/register
     try:
         first_msg = await websocket.recv()
         login_data = json.loads(first_msg)
-        if login_data.get("type") != "login":
-            await websocket.send(json.dumps({"type": "error", "message": "Expected login"}))
+        msg_type = login_data.get("type")
+        username = login_data.get("username", "")
+        password = login_data.get("password", "")
+
+        if msg_type == "register":
+            if db.register(username, password):
+                print(f"[SERVER] New user registered: {username}")
+            else:
+                await websocket.send(json.dumps({"type": "error", "message": "Username already exists"}))
+                await websocket.close()
+                return
+        elif msg_type == "login":
+            if not db.login(username, password):
+                # אם המשתמש לא קיים — נרשם אוטומטית
+                if not db.user_exists(username):
+                    db.register(username, password)
+                    print(f"[SERVER] Auto-registered: {username}")
+                else:
+                    await websocket.send(json.dumps({"type": "error", "message": "Wrong password"}))
+                    await websocket.close()
+                    return
+        else:
+            await websocket.send(json.dumps({"type": "error", "message": "Expected login or register"}))
             await websocket.close()
             return
-        player_name = login_data.get("name", "Player")
+
+        player_name = username
+        player_rating = db.get_rating(username)
     except:
         await websocket.close()
         return
 
     # רישום שחקן — ראשון לבן, שני שחור
     if len(players) == 0:
-        players[websocket] = {"color": "white", "name": player_name}
-        await websocket.send(json.dumps({"type": "assigned", "color": "white", "name": player_name}))
-        print(f"[SERVER] {player_name} connected as White")
+        players[websocket] = {"color": "white", "name": player_name, "username": username}
+        await websocket.send(json.dumps({
+            "type": "assigned", "color": "white", "name": player_name, "rating": player_rating
+        }))
+        print(f"[SERVER] {player_name} (Rating: {player_rating}) connected as White")
         print("[SERVER] Waiting for second player...")
     elif len(players) == 1:
-        players[websocket] = {"color": "black", "name": player_name}
-        await websocket.send(json.dumps({"type": "assigned", "color": "black", "name": player_name}))
-        print(f"[SERVER] {player_name} connected as Black")
+        players[websocket] = {"color": "black", "name": player_name, "username": username}
+        await websocket.send(json.dumps({
+            "type": "assigned", "color": "black", "name": player_name, "rating": player_rating
+        }))
+        print(f"[SERVER] {player_name} (Rating: {player_rating}) connected as Black")
 
         # שני שחקנים — שולח מצב התחלתי
         game_start_time = time.time()
@@ -219,7 +248,21 @@ async def game_tick():
         if elapsed_ms > 0:
             events = engine.wait(elapsed_ms)
             if events:
-                # משהו השתנה — שולח מצב מעודכן
+                # בודק אם game over — מעדכן ELO
+                snapshot = engine.get_snapshot()
+                if snapshot.game_over and snapshot.winner:
+                    winner_username = None
+                    loser_username = None
+                    for info in players.values():
+                        if info["color"] == snapshot.winner:
+                            winner_username = info["username"]
+                        else:
+                            loser_username = info["username"]
+                    if winner_username and loser_username:
+                        new_w, new_l = db.update_ratings(winner_username, loser_username)
+                        print(f"[SERVER] ELO updated: {winner_username}={new_w}, {loser_username}={new_l}")
+
+                # שולח מצב מעודכן
                 state = get_game_state_json()
                 for ws in list(players.keys()):
                     try:

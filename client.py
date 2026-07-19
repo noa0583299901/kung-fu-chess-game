@@ -73,16 +73,43 @@ async def main():
     print("=" * 40)
     print("   KUNG FU CHESS")
     print("=" * 40)
-    username = input("Enter your name: ").strip()
-    if not username:
-        username = "Player"
+    print("\n1. Login")
+    print("2. Register")
+    choice = input("\nChoice (1/2): ").strip()
 
-    print(f"\nHello {username}! Connecting to {SERVER_URL}...")
+    username = input("Username: ").strip()
+    password = input("Password: ").strip()
+
+    if not username or not password:
+        print("Username and password required!")
+        return
+
+    action = "register" if choice == "2" else "login"
+
+    print(f"\nConnecting to {SERVER_URL}...")
 
     async with websockets.connect(SERVER_URL) as websocket:
-        # שולח שם משתמש כהודעה ראשונה
-        await websocket.send(json.dumps({"type": "login", "name": username}))
-        print("Connected! Waiting for opponent...")
+        # שולח login/register
+        await websocket.send(json.dumps({
+            "type": action,
+            "username": username,
+            "password": password,
+        }))
+
+        # מחכה לתשובה
+        response = await websocket.recv()
+        data = json.loads(response)
+
+        if data.get("type") == "error":
+            print(f"Error: {data['message']}")
+            return
+
+        if data.get("type") == "assigned":
+            color = data["color"]
+            rating = data.get("rating", 1200)
+            print(f"\nWelcome {username}! (Rating: {rating})")
+            print(f"You are: {color.upper()}")
+            print("Waiting for opponent...")
 
         # מריץ קבלה ושליחה במקביל
         receive_task = asyncio.create_task(receive_messages(websocket))
