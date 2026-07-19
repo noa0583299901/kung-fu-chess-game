@@ -69,13 +69,14 @@ class GameSnapshot:
 
 class GameEngine:
     def __init__(self, board: Board, arbiter=None, validate_move_fn=None,
-                 win_condition=None, promotion_rule=None):
+                 win_condition=None, promotion_rule=None, bus=None):
         """
         Application Service — מקבל collaborators דרך DI.
         arbiter: RealTimeArbiter instance (or None for default)
         validate_move_fn: callable(board, source, dest) -> MoveValidation (or None for default)
         win_condition: WinCondition strategy (or None for KingCaptureWin)
         promotion_rule: PromotionRule strategy (or None for PawnToQueenPromotion)
+        bus: EventBus instance (or None — no events published)
         """
         self.board = board
         self.state = GameState()
@@ -83,6 +84,7 @@ class GameEngine:
         self._validate_move = validate_move_fn or validate_move
         self._win_condition = win_condition or KingCaptureWin()
         self._promotion_rule = promotion_rule or PawnToQueenPromotion()
+        self._bus = bus
         self._white_score = 0
         self._black_score = 0
         self._moves_log = []
@@ -94,6 +96,11 @@ class GameEngine:
     def add_observer(self, observer: GameObserver):
         """רושם observer שיקבל הודעות על אירועי משחק."""
         self._observers.append(observer)
+
+    def _publish(self, event_name: str, data: dict):
+        """מפרסם אירוע דרך ה-Bus (אם קיים)."""
+        if self._bus is not None:
+            self._bus.publish(event_name, data)
 
     def _notify_piece_moved(self, event: PieceMovedEvent):
         for obs in self._observers:
@@ -143,6 +150,7 @@ class GameEngine:
         # מאתחל שעון בלחיצה הראשונה
         if self._start_time is None:
             self._start_time = time.time()
+            self._publish("game_start", {})
 
         return MoveResult(True, REASON_OK)
 
@@ -188,10 +196,16 @@ class GameEngine:
             piece.kind, piece.color, event.destination, event.destination, elapsed
         ))
 
-        # notify: piece moved
+        # notify: piece moved (observer + bus)
         self._notify_piece_moved(PieceMovedEvent(
             piece.kind, piece.color, event.destination, event.destination, elapsed
         ))
+        self._publish("piece_moved", {
+            "piece_kind": piece.kind,
+            "color": piece.color,
+            "destination": event.destination,
+            "timestamp": elapsed,
+        })
 
         # score + notify: capture
         if event.captured_piece is not None:
@@ -205,6 +219,12 @@ class GameEngine:
                 event.captured_piece.kind, event.captured_piece.color,
                 piece.color, value
             ))
+            self._publish("piece_captured", {
+                "captured_kind": event.captured_piece.kind,
+                "captured_color": event.captured_piece.color,
+                "capturer_color": piece.color,
+                "value": value,
+            })
 
         # promotion — דרך PromotionRule strategy
         new_kind = self._promotion_rule.check(piece, self.board.rows)
@@ -219,6 +239,7 @@ class GameEngine:
             if winner is not None:
                 self.state.end_game(winner)
                 self._notify_game_over(GameOverEvent(winner))
+                self._publish("game_over", {"winner": winner})
 
         # cooldown — כלי עובר ל-RESTING
         piece.state = RESTING

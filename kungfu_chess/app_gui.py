@@ -15,6 +15,10 @@ import time
 
 from kungfu_chess.io.board_parser import parse_board
 from kungfu_chess.engine.game_engine import GameEngine
+from kungfu_chess.engine.event_bus import EventBus
+from kungfu_chess.engine.subscribers import (
+    ScoreSubscriber, MoveLogSubscriber, SoundSubscriber, AnimationSubscriber
+)
 from kungfu_chess.input.controller import Controller
 from kungfu_chess.input.board_mapper import CELL_SIZE
 from kungfu_chess.view.renderer import Renderer
@@ -80,17 +84,33 @@ def _find_board_image():
 # ===========================================================================
 
 def _create_game(board_lines):
-    """יוצר engine + controller מ-board lines."""
+    """יוצר engine + controller + bus מ-board lines."""
     board, error = parse_board(board_lines)
     if error:
         print(f"Board error: {error}")
-        return None, None
+        return None, None, None
     if board is None:
         print("Empty board")
-        return None, None
-    engine = GameEngine(board)
+        return None, None, None
+
+    # יוצר Event Bus ורושם subscribers
+    bus = EventBus()
+    score_sub = ScoreSubscriber()
+    move_log_sub = MoveLogSubscriber()
+    sound_sub = SoundSubscriber()
+    anim_sub = AnimationSubscriber()
+
+    bus.subscribe("piece_captured", score_sub.on_piece_captured)
+    bus.subscribe("piece_moved", move_log_sub.on_piece_moved)
+    bus.subscribe("piece_moved", sound_sub.on_piece_moved)
+    bus.subscribe("piece_captured", sound_sub.on_piece_captured)
+    bus.subscribe("game_over", sound_sub.on_game_over)
+    bus.subscribe("game_start", anim_sub.on_game_start)
+    bus.subscribe("game_over", anim_sub.on_game_over)
+
+    engine = GameEngine(board, bus=bus)
     controller = Controller(engine)
-    return engine, controller
+    return engine, controller, bus
 
 
 # ===========================================================================
@@ -121,7 +141,7 @@ def _handle_mouse_input(controller):
 # Game loop
 # ===========================================================================
 
-def _game_loop(engine, controller, renderer, board_lines):
+def _game_loop(engine, controller, renderer, board_lines, bus):
     """לולאת המשחק הראשית — input, time, render, repeat."""
     window_name = "Kung Fu Chess"
     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
@@ -156,7 +176,7 @@ def _game_loop(engine, controller, renderer, board_lines):
         if key == 27 or key == ord('q'):
             break
         elif key == ord('r'):
-            engine, controller = _create_game(board_lines)
+            engine, controller, bus = _create_game(board_lines)
 
     cv2.destroyAllWindows()
 
@@ -170,12 +190,12 @@ def main(board_lines=None):
     if board_lines is None:
         board_lines = DEFAULT_BOARD
 
-    engine, controller = _create_game(board_lines)
+    engine, controller, bus = _create_game(board_lines)
     if engine is None:
         return
 
     renderer = Renderer(_find_assets_dir(), _find_board_image())
-    _game_loop(engine, controller, renderer, board_lines)
+    _game_loop(engine, controller, renderer, board_lines, bus)
 
 
 if __name__ == "__main__":
