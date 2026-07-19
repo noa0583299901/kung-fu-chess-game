@@ -41,7 +41,7 @@ DEFAULT_BOARD = [
 ]
 
 # --- שחקנים מחוברים ---
-players = {}  # websocket -> color ("white" / "black")
+players = {}  # websocket -> {"color": ..., "name": ...}
 engine = None
 bus = None
 game_start_time = None
@@ -112,21 +112,45 @@ async def handle_client(websocket):
     """מטפל בחיבור של client חדש."""
     global game_start_time
 
-    # רישום שחקן
+    # מחכה להודעת login עם שם
+    try:
+        first_msg = await websocket.recv()
+        login_data = json.loads(first_msg)
+        if login_data.get("type") != "login":
+            await websocket.send(json.dumps({"type": "error", "message": "Expected login"}))
+            await websocket.close()
+            return
+        player_name = login_data.get("name", "Player")
+    except:
+        await websocket.close()
+        return
+
+    # רישום שחקן — ראשון לבן, שני שחור
     if len(players) == 0:
-        players[websocket] = "white"
-        await websocket.send(json.dumps({"type": "assigned", "color": "white"}))
-        print("[SERVER] White player connected")
+        players[websocket] = {"color": "white", "name": player_name}
+        await websocket.send(json.dumps({"type": "assigned", "color": "white", "name": player_name}))
+        print(f"[SERVER] {player_name} connected as White")
+        print("[SERVER] Waiting for second player...")
     elif len(players) == 1:
-        players[websocket] = "black"
-        await websocket.send(json.dumps({"type": "assigned", "color": "black"}))
-        print("[SERVER] Black player connected")
+        players[websocket] = {"color": "black", "name": player_name}
+        await websocket.send(json.dumps({"type": "assigned", "color": "black", "name": player_name}))
+        print(f"[SERVER] {player_name} connected as Black")
+
         # שני שחקנים — שולח מצב התחלתי
         game_start_time = time.time()
+        # שולח שמות שניהם לשניהם
+        white_name = [p["name"] for p in players.values() if p["color"] == "white"][0]
+        black_name = [p["name"] for p in players.values() if p["color"] == "black"][0]
+        for ws in players:
+            await ws.send(json.dumps({
+                "type": "game_start",
+                "white_name": white_name,
+                "black_name": black_name,
+            }))
         state = get_game_state_json()
         for ws in players:
             await ws.send(json.dumps({"type": "state", "data": json.loads(state)}))
-        print("[SERVER] Game started!")
+        print(f"[SERVER] Game started! {white_name} (W) vs {black_name} (B)")
     else:
         await websocket.send(json.dumps({"type": "error", "message": "Game full"}))
         await websocket.close()
@@ -134,8 +158,7 @@ async def handle_client(websocket):
 
     try:
         async for message in websocket:
-            # בודק שהשחקן שולח פקודה בתורו (צבע מתאים)
-            player_color = players.get(websocket)
+            player_color = players.get(websocket, {}).get("color")
 
             cmd_type, data = parse_command(message)
 
@@ -167,7 +190,8 @@ async def handle_client(websocket):
                 await ws.send(json.dumps({"type": "state", "data": json.loads(state)}))
 
     except websockets.exceptions.ConnectionClosed:
-        print(f"[SERVER] {players.get(websocket, 'unknown')} disconnected")
+        player_info = players.get(websocket, {})
+        print(f"[SERVER] {player_info.get('name', 'unknown')} ({player_info.get('color', '?')}) disconnected")
     finally:
         if websocket in players:
             del players[websocket]

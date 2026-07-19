@@ -69,16 +69,25 @@ async def send_commands(websocket):
 
 
 async def main():
-    print(f"Connecting to {SERVER_URL}...")
+    # --- Home screen: Login ---
+    print("=" * 40)
+    print("   KUNG FU CHESS")
+    print("=" * 40)
+    username = input("Enter your name: ").strip()
+    if not username:
+        username = "Player"
+
+    print(f"\nHello {username}! Connecting to {SERVER_URL}...")
 
     async with websockets.connect(SERVER_URL) as websocket:
-        print("Connected!")
+        # שולח שם משתמש כהודעה ראשונה
+        await websocket.send(json.dumps({"type": "login", "name": username}))
+        print("Connected! Waiting for opponent...")
 
         # מריץ קבלה ושליחה במקביל
         receive_task = asyncio.create_task(receive_messages(websocket))
         send_task = asyncio.create_task(send_commands(websocket))
 
-        # מחכה שאחד מהם יסתיים
         done, pending = await asyncio.wait(
             [receive_task, send_task],
             return_when=asyncio.FIRST_COMPLETED
