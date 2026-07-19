@@ -72,3 +72,64 @@ def parse_board(board_lines: list) -> tuple:
             piece_id += 1
 
     return board, None
+
+
+# מיפוי CSV format: "RB" -> ("b", "R"), "PW" -> ("w", "P"), "KW" -> ("w", "K")
+CSV_COLOR_MAP = {
+    "W": "w",
+    "B": "b",
+}
+
+
+def load_board_from_csv(csv_path: str) -> tuple:
+    """
+    קורא לוח מקובץ CSV (כמו board.csv של CTD26).
+    פורמט: RB,NB,BB,KB,QB,BB,NB,RB (כל תא = סוג+צבע, ריק = "")
+    מחזיר (Board, None) אם תקין, או (None, error_message) אם לא.
+    """
+    import csv
+
+    try:
+        with open(csv_path, "r") as f:
+            reader = csv.reader(f)
+            rows_data = [row for row in reader if any(cell.strip() for cell in row)]
+    except FileNotFoundError:
+        return None, f"File not found: {csv_path}"
+
+    if not rows_data:
+        return None, None
+
+    width = len(rows_data[0])
+    num_rows = len(rows_data)
+    board = Board(num_rows, width)
+    piece_id = 1
+
+    for r, row in enumerate(rows_data):
+        if len(row) != width:
+            return None, ERROR_ROW_WIDTH
+        for c, cell in enumerate(row):
+            cell = cell.strip()
+            if not cell:
+                continue  # תא ריק
+
+            # פורמט CSV: "RB" = Rook Black, "PW" = Pawn White
+            # אות ראשונה = סוג, אות שנייה = צבע
+            if len(cell) != 2:
+                return None, f"Invalid token: {cell}"
+
+            kind_letter = cell[0]
+            color_letter = cell[1]
+
+            if kind_letter not in KIND_MAP:
+                return None, f"Unknown piece: {kind_letter}"
+            if color_letter not in CSV_COLOR_MAP:
+                return None, f"Unknown color: {color_letter}"
+
+            kind = KIND_MAP[kind_letter]
+            color = COLOR_MAP[CSV_COLOR_MAP[color_letter]]
+            pos = Position(r, c)
+            piece = Piece(piece_id, color, kind, pos)
+            board.add_piece(piece)
+            piece_id += 1
+
+    return board, None
