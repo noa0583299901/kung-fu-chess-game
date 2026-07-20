@@ -3,15 +3,27 @@ Kung Fu Chess — WebSocket Client
 
 Flow:
     1. Login/Register
-    2. Press Play → matchmaking
+    2. Play (matchmaking) / Room (create/join)
     3. Game starts → send moves, receive state
 """
 import asyncio
 import json
 import websockets
 import sys
+import logging
 
 SERVER_URL = "ws://localhost:8765"
+
+# --- Client logging ---
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [CLIENT] %(message)s",
+    handlers=[
+        logging.FileHandler("client.log", encoding="utf-8"),
+        logging.StreamHandler(),
+    ]
+)
+client_logger = logging.getLogger("client")
 
 
 async def receive_messages(websocket):
@@ -23,8 +35,25 @@ async def receive_messages(websocket):
 
             if msg_type == "logged_in":
                 print(f"\n✓ Logged in as: {data['username']} (Rating: {data['rating']})")
-                print("\nType 'play' to find a game, 'quit' to exit")
+                print("\nCommands:")
+                print("  play           — find random opponent")
+                print("  room create    — create a new room")
+                print("  room join ID   — join existing room")
+                print("  quit           — exit")
                 print("> ", end="", flush=True)
+                client_logger.info(f"Logged in: {data['username']}")
+
+            elif msg_type == "room_created":
+                print(f"\n✓ {data['message']}")
+                print(f"  Room ID: {data['room_id']}")
+                print("  Waiting for opponent to join...")
+                print("> ", end="", flush=True)
+                client_logger.info(f"Room created: {data['room_id']}")
+
+            elif msg_type == "viewer":
+                print(f"\n👁 {data['message']}")
+                print(f"  Room: {data['room_id']}")
+                client_logger.info(f"Viewing room: {data['room_id']}")
 
             elif msg_type == "searching":
                 print(f"\n⏳ {data['message']}")
@@ -95,15 +124,32 @@ async def send_commands(websocket):
 
         if cmd.lower() == "play":
             await websocket.send(json.dumps({"type": "play"}))
+            client_logger.info("Entered matchmaking")
+
+        elif cmd.lower() == "room create":
+            await websocket.send(json.dumps({"type": "create_room"}))
+            client_logger.info("Creating room")
+
+        elif cmd.lower().startswith("room join"):
+            parts = cmd.split()
+            if len(parts) >= 3:
+                room_id = parts[2]
+                await websocket.send(json.dumps({"type": "join_room", "room_id": room_id}))
+                client_logger.info(f"Joining room: {room_id}")
+            else:
+                print("  Usage: room join ROOM_ID")
+                print("> ", end="", flush=True)
 
         elif cmd.startswith("JUMP"):
             await websocket.send(json.dumps({"type": "jump", "cmd": cmd}))
+            client_logger.info(f"Sent jump: {cmd}")
 
         elif len(cmd) == 6 and cmd[0] in "WB":
             await websocket.send(json.dumps({"type": "move", "cmd": cmd}))
+            client_logger.info(f"Sent move: {cmd}")
 
         elif cmd:
-            print("  Unknown command. Use: WRa1a5 / JUMP WPe2 / play / quit")
+            print("  Unknown command. Use: play / room create / room join ID / WRa1a5 / quit")
             print("> ", end="", flush=True)
 
 

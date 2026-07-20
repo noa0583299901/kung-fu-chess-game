@@ -17,6 +17,8 @@ import asyncio
 import json
 import websockets
 import time
+import logging
+import uuid
 
 from kungfu_chess.io.board_parser import parse_board
 from kungfu_chess.io.board_printer import board_to_string
@@ -25,6 +27,17 @@ from kungfu_chess.engine.event_bus import EventBus
 from kungfu_chess.model.position import Position
 from kungfu_chess.model.piece import WHITE, BLACK
 from database import Database
+
+# --- Logging ---
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [SERVER] %(message)s",
+    handlers=[
+        logging.FileHandler("server.log", encoding="utf-8"),
+        logging.StreamHandler(),
+    ]
+)
+logger = logging.getLogger("server")
 
 # --- הגדרות ---
 HOST = "localhost"
@@ -48,6 +61,7 @@ DEFAULT_BOARD = [
 db = Database()
 matchmaking_queue = []  # list of {"ws": websocket, "username": ..., "rating": ..., "time": ...}
 active_games = {}       # game_id -> GameSession
+rooms = {}              # room_id -> Room
 
 
 class GameSession:
@@ -72,6 +86,44 @@ class GameSession:
         self.game_over_handled = False
 
     def get_state_json(self):
+
+
+class Room:
+    """חדר משחק — שני שחקנים + צופים."""
+
+    def __init__(self, room_id, creator_ws, creator_username):
+        self.room_id = room_id
+        self.white_ws = creator_ws          # יוצר החדר = לבן
+        self.white_user = creator_username
+        self.black_ws = None
+        self.black_user = None
+        self.viewers = []                   # list of websockets
+        self.game_session = None            # GameSession (None עד שהשחור מצטרף)
+
+    @property
+    def is_full(self):
+        """שני שחקנים מחוברים."""
+        return self.black_ws is not None
+
+    def start_game(self):
+        """מתחיל משחק אחרי שהשחור הצטרף."""
+        game_id = self.room_id
+        self.game_session = GameSession(
+            game_id, self.white_ws, self.black_ws,
+            self.white_user, self.black_user
+        )
+        active_games[game_id] = self.game_session
+        return self.game_session
+
+    def all_websockets(self):
+        """כל ה-websockets בחדר (שחקנים + צופים)."""
+        ws_list = []
+        if self.white_ws:
+            ws_list.append(self.white_ws)
+        if self.black_ws:
+            ws_list.append(self.black_ws)
+        ws_list.extend(self.viewers)
+        return ws_list
         snapshot = self.engine.get_snapshot()
         board_text = board_to_string(snapshot.board)
         return {
@@ -251,6 +303,87 @@ async def handle_client(websocket):
                     }))
                     print(f"[SERVER] {username} entered matchmaking queue")
 
+            # --- Create Room ---
+            elif msg_type == "create_room":
+                if username is None:
+                    await websocket.send(json.dumps({"type": "error", "message": "Login first"}))
+                    continue
+
+                room_id = str(uuid.uuid4())[:8]  # 8 תווים ייחודיים
+                room = Room(room_id, websocket, username)
+                rooms[room_id] = room
+                logger.info(f"{username} created room {room_id}")
+
+                await websocket.send(json.dumps({
+                    "type": "room_created",
+                    "room_id": room_id,
+                    "message": f"Room created! Share this ID: {room_id}",
+                }))
+
+            # --- Join Room ---
+            elif msg_type == "join_room":
+                if username is None:
+                    await websocket.send(json.dumps({"type": "error", "message": "Login first"}))
+                    continue
+
+                room_id = data.get("room_id", "").strip()
+                if room_id not in rooms:
+                    await websocket.send(json.dumps({
+                        "type": "error", "message": f"Room '{room_id}' not found"
+                    }))
+                    continue
+
+                room = rooms[room_id]
+
+                if not room.is_full:
+                    # שחקן שני — שחור
+                    room.black_ws = websocket
+                    room.black_user = username
+                    logger.info(f"{username} joined room {room_id} as Black")
+
+                    # מתחיל משחק
+                    game_session = room.start_game()
+
+                    await room.white_ws.send(json.dumps({
+                        "type": "game_start",
+                        "color": "white",
+                        "room_id": room_id,
+                        "opponent": username,
+                        "opponent_rating": rating,
+                    }))
+                    await websocket.send(json.dumps({
+                        "type": "game_start",
+                        "color": "black",
+                        "room_id": room_id,
+                        "opponent": room.white_user,
+                        "opponent_rating": db.get_rating(room.white_user),
+                    }))
+
+                    # שולח מצב לכולם (שחקנים + צופים)
+                    state = game_session.get_state_json()
+                    for ws in room.all_websockets():
+                        try:
+                            await ws.send(json.dumps({"type": "state", "data": state}))
+                        except:
+                            pass
+
+                    logger.info(f"Room {room_id}: Game started! {room.white_user} vs {username}")
+                else:
+                    # צופה
+                    room.viewers.append(websocket)
+                    logger.info(f"{username} joined room {room_id} as Viewer")
+
+                    await websocket.send(json.dumps({
+                        "type": "viewer",
+                        "room_id": room_id,
+                        "message": "You are a viewer. Watching the game.",
+                    }))
+
+                    # שולח מצב נוכחי לצופה
+                    if room.game_session:
+                        state = room.game_session.get_state_json()
+                        await websocket.send(json.dumps({"type": "state", "data": state}))
+
             # --- Game commands (move/jump) ---
             elif msg_type == "move" and game_session:
                 cmd = data.get("cmd", "")
@@ -268,12 +401,18 @@ async def handle_client(websocket):
                 elif cmd_type == "jump":
                     game_session.engine.jump(cmd_data)
 
-                # שולח state לשניהם
+                # שולח state לשניהם + viewers
                 state = game_session.get_state_json()
                 await game_session.white_ws.send(json.dumps({"type": "state", "data": state}))
                 await game_session.black_ws.send(json.dumps({"type": "state", "data": state}))
-
-            elif msg_type == "jump" and game_session:
+                # viewers
+                room_for_game = next((r for r in rooms.values() if r.game_session == game_session), None)
+                if room_for_game:
+                    for v_ws in room_for_game.viewers:
+                        try:
+                            await v_ws.send(json.dumps({"type": "state", "data": state}))
+                        except:
+                            pass
                 cmd = data.get("cmd", "")
                 _, pos = parse_move_command(cmd)
                 if pos:
