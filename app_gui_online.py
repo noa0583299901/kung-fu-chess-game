@@ -26,8 +26,8 @@ from kungfu_chess.io.board_parser import parse_board
 from kungfu_chess.io.board_printer import board_to_string
 from kungfu_chess.engine.game_engine import GameEngine, GameSnapshot
 from kungfu_chess.model.board import Board
-from kungfu_chess.constants import RENDER_CELL_SIZE, SIDE_PANEL_WIDTH, TOP_BAR_HEIGHT, CELL_SIZE
-from kungfu_chess.input.board_mapper import CELL_SIZE as LOGICAL_CELL
+from kungfu_chess.constants import RENDER_CELL_SIZE, SIDE_PANEL_WIDTH, TOP_BAR_HEIGHT
+from kungfu_chess.input.board_mapper import CELL_SIZE
 
 SERVER_URL = "ws://localhost:8765"
 GAME_FPS = 30
@@ -45,20 +45,9 @@ ws_connection = None        # WebSocket connection
 # WebSocket — רץ ב-thread נפרד
 # ===========================================================================
 
-async def ws_loop():
+async def ws_loop(action, username, password, lobby_choice, room_id_input):
     """מתחבר לServer, שולח login, ומקבל state updates."""
     global current_state, my_color, game_started, connected, ws_connection
-
-    # --- Login ---
-    print("=" * 40)
-    print("   KUNG FU CHESS — ONLINE")
-    print("=" * 40)
-    print("\n1. Login")
-    print("2. Register")
-    choice = input("Choice (1/2): ").strip()
-    username = input("Username: ").strip()
-    password = input("Password: ").strip()
-    action = "register" if choice == "2" else "login"
 
     print(f"\nConnecting to {SERVER_URL}...")
 
@@ -80,13 +69,7 @@ async def ws_loop():
             return
         print(f"✓ Logged in! Rating: {response.get('rating', '?')}")
 
-        # --- Lobby ---
-        print("\nCommands:")
-        print("  1 — Play (matchmaking)")
-        print("  2 — Create room")
-        print("  3 — Join room")
-        lobby_choice = input("Choice: ").strip()
-
+        # --- Lobby action ---
         if lobby_choice == "1":
             await ws.send(json.dumps({"type": "play"}))
             print("⏳ Searching for opponent...")
@@ -96,11 +79,13 @@ async def ws_loop():
             if resp.get("type") == "room_created":
                 print(f"✓ Room created! ID: {resp['room_id']}")
                 print("Waiting for opponent...")
+            elif resp.get("type") == "error":
+                print(f"Error: {resp['message']}")
+                return
         elif lobby_choice == "3":
-            room_id = input("Room ID: ").strip()
-            await ws.send(json.dumps({"type": "join_room", "room_id": room_id}))
+            await ws.send(json.dumps({"type": "join_room", "room_id": room_id_input}))
 
-        # --- מקבל messages (game_start, state, etc.) ---
+        # --- מקבל messages ---
         async for message in ws:
             data = json.loads(message)
             msg_type = data.get("type")
@@ -133,17 +118,17 @@ async def ws_loop():
                 print(f"🏆 {data.get('message', '')}")
 
             elif msg_type == "rejected":
-                pass  # silently ignore — piece didn't move
+                pass
 
             elif msg_type == "error":
                 print(f"Error: {data.get('message', '')}")
 
 
-def start_ws_thread():
+def start_ws_thread(action, username, password, lobby_choice, room_id_input):
     """מפעיל את WebSocket loop ב-thread נפרד."""
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    loop.run_until_complete(ws_loop())
+    loop.run_until_complete(ws_loop(action, username, password, lobby_choice, room_id_input))
 
 
 # ===========================================================================
@@ -294,9 +279,33 @@ def gui_main():
 # ===========================================================================
 
 if __name__ == "__main__":
-    # מפעיל WebSocket ב-thread נפרד
-    ws_thread = threading.Thread(target=start_ws_thread, daemon=True)
+    # שלב 1: Login + Lobby בטרמינל (לפני GUI)
+    print("=" * 40)
+    print("   KUNG FU CHESS — ONLINE")
+    print("=" * 40)
+    print("\n1. Login")
+    print("2. Register")
+    choice = input("Choice (1/2): ").strip()
+    username = input("Username: ").strip()
+    password = input("Password: ").strip()
+    action = "register" if choice == "2" else "login"
+
+    print("\n1 — Play (matchmaking)")
+    print("2 — Create room")
+    print("3 — Join room")
+    lobby_choice = input("Choice: ").strip()
+    room_id_input = ""
+    if lobby_choice == "3":
+        room_id_input = input("Room ID: ").strip()
+
+    # שלב 2: מפעיל WebSocket עם הפרטים שהוזנו
+    import functools
+    ws_thread = threading.Thread(
+        target=start_ws_thread,
+        args=(action, username, password, lobby_choice, room_id_input),
+        daemon=True
+    )
     ws_thread.start()
 
-    # מפעיל GUI ב-thread הראשי (OpenCV דורש main thread)
+    # שלב 3: מפעיל GUI (מחכה שהמשחק יתחיל)
     gui_main()
