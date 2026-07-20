@@ -1,17 +1,17 @@
 """
-Kung Fu Chess — WebSocket Server
+Kung Fu Chess — WebSocket Server (Single-process)
 
-מריץ את הלוגיקה (GameEngine).
-שני Clients מתחברים ושולחים פקודות.
-Server שולח מצב לוח מעודכן לשניהם.
+Features:
+- Login/Register with SQLite + password hash
+- Matchmaking: finds opponent with ELO ±100, waits up to 60s
+- Disconnect timeout: 20s countdown, then auto-resign
+- Real-time game loop with GameEngine
 
-פורמט פקודה מ-Client:
-    "WRa1a5" = White Rook from a1 to a5
-    "BPe7e5" = Black Pawn from e7 to e5
-    "JUMP WPe2" = White Pawn at e2 jumps
-
-פורמט תגובה מ-Server:
-    JSON עם מצב הלוח המלא
+Commands from Client:
+    {"type": "login/register", "username": ..., "password": ...}
+    {"type": "play"}           — enters matchmaking queue
+    {"type": "move", "cmd": "WRa1a5"}
+    {"type": "jump", "cmd": "JUMP WPe2"}
 """
 import asyncio
 import json
@@ -29,6 +29,9 @@ from database import Database
 # --- הגדרות ---
 HOST = "localhost"
 PORT = 8765
+MATCHMAKING_TIMEOUT = 60    # שניות לחיפוש יריב
+DISCONNECT_TIMEOUT = 20     # שניות לפני auto-resign
+ELO_RANGE = 100             # טווח ELO לchיפוש
 
 DEFAULT_BOARD = [
     "bR bN bB bQ bK bB bN bR",
@@ -41,44 +44,88 @@ DEFAULT_BOARD = [
     "wR wN wB wQ wK wB wN wR",
 ]
 
-# --- שחקנים מחוברים ---
-players = {}  # websocket -> {"color": ..., "name": ..., "username": ...}
-engine = None
-bus = None
-game_start_time = None
+# --- State ---
 db = Database()
+matchmaking_queue = []  # list of {"ws": websocket, "username": ..., "rating": ..., "time": ...}
+active_games = {}       # game_id -> GameSession
+
+
+class GameSession:
+    """מייצג משחק פעיל בין שני שחקנים."""
+
+    def __init__(self, game_id, white_ws, black_ws, white_user, black_user):
+        self.game_id = game_id
+        self.white_ws = white_ws
+        self.black_ws = black_ws
+        self.white_user = white_user
+        self.black_user = black_user
+
+        # יוצר engine
+        board, _ = parse_board(DEFAULT_BOARD)
+        self.bus = EventBus()
+        self.engine = GameEngine(board, bus=self.bus)
+        self.start_time = time.time()
+
+        # disconnect tracking
+        self.disconnected_player = None  # "white" / "black" / None
+        self.disconnect_time = None
+        self.game_over_handled = False
+
+    def get_state_json(self):
+        snapshot = self.engine.get_snapshot()
+        board_text = board_to_string(snapshot.board)
+        return {
+            "board": board_text,
+            "game_over": snapshot.game_over,
+            "winner": snapshot.winner,
+            "white_score": snapshot.white_score,
+            "black_score": snapshot.black_score,
+            "timestamp": time.time() - self.start_time,
+            "white_name": self.white_user,
+            "black_name": self.black_user,
+        }
+
+    def get_opponent_ws(self, ws):
+        if ws == self.white_ws:
+            return self.black_ws
+        return self.white_ws
+
+    def get_color(self, ws):
+        if ws == self.white_ws:
+            return "white"
+        return "black"
+
+
+# --- Game ID counter ---
+_game_id_counter = 0
+
+
+def next_game_id():
+    global _game_id_counter
+    _game_id_counter += 1
+    return _game_id_counter
 
 
 # ===========================================================================
 # Parse command
 # ===========================================================================
 
-def parse_command(cmd: str):
-    """
-    מפרסר פקודה מ-Client.
-    "WRa1a5" -> (color, kind, source_pos, dest_pos)
-    "JUMP WPe2" -> ("jump", position)
-    """
+def parse_move_command(cmd: str):
+    """מפרסר פקודת move: "WRa1a5" -> (source, dest)"""
     cmd = cmd.strip()
 
     if cmd.startswith("JUMP"):
-        # JUMP WPe2
         parts = cmd.split()
         if len(parts) == 2:
             piece_str = parts[1]
-            color = "white" if piece_str[0] == "W" else "black"
             col = ord(piece_str[2]) - ord('a')
             row = 8 - int(piece_str[3])
             return "jump", Position(row, col)
         return None, None
 
     if len(cmd) == 6:
-        # WRa1a5
-        color = "white" if cmd[0] == "W" else "black"
-        # source
         src_col = ord(cmd[2]) - ord('a')
         src_row = 8 - int(cmd[3])
-        # destination
         dst_col = ord(cmd[4]) - ord('a')
         dst_row = 8 - int(cmd[5])
         return "move", (Position(src_row, src_col), Position(dst_row, dst_col))
@@ -87,23 +134,16 @@ def parse_command(cmd: str):
 
 
 # ===========================================================================
-# Game state → JSON
+# Matchmaking
 # ===========================================================================
 
-def get_game_state_json():
-    """מחזיר את מצב המשחק כ-JSON string."""
-    snapshot = engine.get_snapshot()
-    board_text = board_to_string(snapshot.board)
-
-    state = {
-        "board": board_text,
-        "game_over": snapshot.game_over,
-        "winner": snapshot.winner,
-        "white_score": snapshot.white_score,
-        "black_score": snapshot.black_score,
-        "timestamp": time.time() - game_start_time if game_start_time else 0,
-    }
-    return json.dumps(state)
+def find_match(new_player):
+    """מחפש יריב בתור עם ELO ±100."""
+    for i, waiting in enumerate(matchmaking_queue):
+        if abs(waiting["rating"] - new_player["rating"]) <= ELO_RANGE:
+            matchmaking_queue.pop(i)
+            return waiting
+    return None
 
 
 # ===========================================================================
@@ -111,164 +151,275 @@ def get_game_state_json():
 # ===========================================================================
 
 async def handle_client(websocket):
-    """מטפל בחיבור של client חדש."""
-    global game_start_time
-
-    # מחכה להודעת login/register
-    try:
-        first_msg = await websocket.recv()
-        login_data = json.loads(first_msg)
-        msg_type = login_data.get("type")
-        username = login_data.get("username", "")
-        password = login_data.get("password", "")
-
-        if msg_type == "register":
-            if db.register(username, password):
-                print(f"[SERVER] New user registered: {username}")
-            else:
-                await websocket.send(json.dumps({"type": "error", "message": "Username already exists"}))
-                await websocket.close()
-                return
-        elif msg_type == "login":
-            if not db.login(username, password):
-                # אם המשתמש לא קיים — נרשם אוטומטית
-                if not db.user_exists(username):
-                    db.register(username, password)
-                    print(f"[SERVER] Auto-registered: {username}")
-                else:
-                    await websocket.send(json.dumps({"type": "error", "message": "Wrong password"}))
-                    await websocket.close()
-                    return
-        else:
-            await websocket.send(json.dumps({"type": "error", "message": "Expected login or register"}))
-            await websocket.close()
-            return
-
-        player_name = username
-        player_rating = db.get_rating(username)
-    except:
-        await websocket.close()
-        return
-
-    # רישום שחקן — ראשון לבן, שני שחור
-    if len(players) == 0:
-        players[websocket] = {"color": "white", "name": player_name, "username": username}
-        await websocket.send(json.dumps({
-            "type": "assigned", "color": "white", "name": player_name, "rating": player_rating
-        }))
-        print(f"[SERVER] {player_name} (Rating: {player_rating}) connected as White")
-        print("[SERVER] Waiting for second player...")
-    elif len(players) == 1:
-        players[websocket] = {"color": "black", "name": player_name, "username": username}
-        await websocket.send(json.dumps({
-            "type": "assigned", "color": "black", "name": player_name, "rating": player_rating
-        }))
-        print(f"[SERVER] {player_name} (Rating: {player_rating}) connected as Black")
-
-        # שני שחקנים — שולח מצב התחלתי
-        game_start_time = time.time()
-        # שולח שמות שניהם לשניהם
-        white_name = [p["name"] for p in players.values() if p["color"] == "white"][0]
-        black_name = [p["name"] for p in players.values() if p["color"] == "black"][0]
-        for ws in players:
-            await ws.send(json.dumps({
-                "type": "game_start",
-                "white_name": white_name,
-                "black_name": black_name,
-            }))
-        state = get_game_state_json()
-        for ws in players:
-            await ws.send(json.dumps({"type": "state", "data": json.loads(state)}))
-        print(f"[SERVER] Game started! {white_name} (W) vs {black_name} (B)")
-    else:
-        await websocket.send(json.dumps({"type": "error", "message": "Game full"}))
-        await websocket.close()
-        return
+    """מטפל בחיבור client — login, matchmaking, game."""
+    username = None
+    rating = 0
+    game_session = None
 
     try:
         async for message in websocket:
-            player_color = players.get(websocket, {}).get("color")
+            data = json.loads(message)
+            msg_type = data.get("type")
 
-            cmd_type, data = parse_command(message)
+            # --- Login / Register ---
+            if msg_type in ("login", "register"):
+                uname = data.get("username", "")
+                passwd = data.get("password", "")
 
-            if cmd_type == "move":
-                source, dest = data
-                result = engine.request_move(source, dest)
-                if result.is_accepted:
-                    print(f"[SERVER] {player_color}: move accepted {message}")
-                else:
+                if msg_type == "register":
+                    if db.register(uname, passwd):
+                        print(f"[SERVER] Registered: {uname}")
+                    else:
+                        await websocket.send(json.dumps({
+                            "type": "error", "message": "Username already exists"
+                        }))
+                        continue
+                else:  # login
+                    if not db.login(uname, passwd):
+                        if not db.user_exists(uname):
+                            db.register(uname, passwd)
+                            print(f"[SERVER] Auto-registered: {uname}")
+                        else:
+                            await websocket.send(json.dumps({
+                                "type": "error", "message": "Wrong password"
+                            }))
+                            continue
+
+                username = uname
+                rating = db.get_rating(username)
+                await websocket.send(json.dumps({
+                    "type": "logged_in", "username": username, "rating": rating
+                }))
+                print(f"[SERVER] {username} logged in (Rating: {rating})")
+
+            # --- Play (enter matchmaking) ---
+            elif msg_type == "play":
+                if username is None:
                     await websocket.send(json.dumps({
-                        "type": "rejected", "reason": result.reason
+                        "type": "error", "message": "Login first"
                     }))
                     continue
 
-            elif cmd_type == "jump":
-                position = data
-                engine.jump(position)
-                print(f"[SERVER] {player_color}: jump at {position}")
+                new_player = {
+                    "ws": websocket,
+                    "username": username,
+                    "rating": rating,
+                    "time": time.time(),
+                }
 
-            else:
-                await websocket.send(json.dumps({
-                    "type": "error", "message": "Invalid command"
-                }))
-                continue
+                # חיפוש יריב
+                opponent = find_match(new_player)
 
-            # שולח מצב מעודכן לשני השחקנים
-            state = get_game_state_json()
-            for ws in players:
-                await ws.send(json.dumps({"type": "state", "data": json.loads(state)}))
+                if opponent:
+                    # מצאנו — מתחילים משחק
+                    game_id = next_game_id()
+                    game_session = GameSession(
+                        game_id,
+                        white_ws=opponent["ws"],
+                        black_ws=websocket,
+                        white_user=opponent["username"],
+                        black_user=username,
+                    )
+                    active_games[game_id] = game_session
+
+                    # שומר reference ב-opponent websocket handler
+                    # שולח לשניהם
+                    await opponent["ws"].send(json.dumps({
+                        "type": "game_start",
+                        "color": "white",
+                        "opponent": username,
+                        "opponent_rating": rating,
+                    }))
+                    await websocket.send(json.dumps({
+                        "type": "game_start",
+                        "color": "black",
+                        "opponent": opponent["username"],
+                        "opponent_rating": opponent["rating"],
+                    }))
+
+                    # שולח מצב התחלתי
+                    state = game_session.get_state_json()
+                    await opponent["ws"].send(json.dumps({"type": "state", "data": state}))
+                    await websocket.send(json.dumps({"type": "state", "data": state}))
+
+                    print(f"[SERVER] Game #{game_id}: {opponent['username']} (W) vs {username} (B)")
+                else:
+                    # לא מצאנו — נכנס לתור
+                    matchmaking_queue.append(new_player)
+                    await websocket.send(json.dumps({
+                        "type": "searching", "message": "Looking for opponent..."
+                    }))
+                    print(f"[SERVER] {username} entered matchmaking queue")
+
+            # --- Game commands (move/jump) ---
+            elif msg_type == "move" and game_session:
+                cmd = data.get("cmd", "")
+                cmd_type, cmd_data = parse_move_command(cmd)
+
+                if cmd_type == "move":
+                    source, dest = cmd_data
+                    result = game_session.engine.request_move(source, dest)
+                    if not result.is_accepted:
+                        await websocket.send(json.dumps({
+                            "type": "rejected", "reason": result.reason
+                        }))
+                        continue
+
+                elif cmd_type == "jump":
+                    game_session.engine.jump(cmd_data)
+
+                # שולח state לשניהם
+                state = game_session.get_state_json()
+                await game_session.white_ws.send(json.dumps({"type": "state", "data": state}))
+                await game_session.black_ws.send(json.dumps({"type": "state", "data": state}))
+
+            elif msg_type == "jump" and game_session:
+                cmd = data.get("cmd", "")
+                _, pos = parse_move_command(cmd)
+                if pos:
+                    game_session.engine.jump(pos)
+                    state = game_session.get_state_json()
+                    await game_session.white_ws.send(json.dumps({"type": "state", "data": state}))
+                    await game_session.black_ws.send(json.dumps({"type": "state", "data": state}))
 
     except websockets.exceptions.ConnectionClosed:
-        player_info = players.get(websocket, {})
-        print(f"[SERVER] {player_info.get('name', 'unknown')} ({player_info.get('color', '?')}) disconnected")
-    finally:
-        if websocket in players:
-            del players[websocket]
+        print(f"[SERVER] {username or 'unknown'} disconnected")
+
+        # הסרה מtור matchmaking
+        matchmaking_queue[:] = [p for p in matchmaking_queue if p["ws"] != websocket]
+
+        # טיפול ב-disconnect באמצע משחק
+        if game_session and not game_session.engine.game_over:
+            color = game_session.get_color(websocket)
+            game_session.disconnected_player = color
+            game_session.disconnect_time = time.time()
+            print(f"[SERVER] {username} disconnected mid-game. 20s countdown started.")
+
+            # מודיע ליריב
+            opponent_ws = game_session.get_opponent_ws(websocket)
+            try:
+                await opponent_ws.send(json.dumps({
+                    "type": "opponent_disconnected",
+                    "countdown": DISCONNECT_TIMEOUT,
+                }))
+            except:
+                pass
 
 
 # ===========================================================================
-# Time advancement (game loop on server)
+# Matchmaking timeout checker
+# ===========================================================================
+
+async def matchmaking_timeout_checker():
+    """בודק כל שנייה אם מישהו חיכה יותר מדקה בתור."""
+    while True:
+        await asyncio.sleep(1)
+        now = time.time()
+        expired = [p for p in matchmaking_queue if now - p["time"] > MATCHMAKING_TIMEOUT]
+        for player in expired:
+            matchmaking_queue.remove(player)
+            try:
+                await player["ws"].send(json.dumps({
+                    "type": "matchmaking_failed",
+                    "message": "Could not find opponent. Try again later."
+                }))
+            except:
+                pass
+            print(f"[SERVER] {player['username']} matchmaking timed out")
+
+
+# ===========================================================================
+# Disconnect timeout checker
+# ===========================================================================
+
+async def disconnect_timeout_checker():
+    """בודק כל שנייה אם שחקן מנותק עבר 20 שניות — auto-resign."""
+    while True:
+        await asyncio.sleep(1)
+        now = time.time()
+
+        for game_id, session in list(active_games.items()):
+            if session.disconnected_player and not session.game_over_handled:
+                elapsed = now - session.disconnect_time
+                remaining = DISCONNECT_TIMEOUT - elapsed
+
+                if remaining <= 0:
+                    # auto-resign — המנותק מפסיד
+                    winner_color = "black" if session.disconnected_player == "white" else "white"
+                    winner_user = session.white_user if winner_color == "white" else session.black_user
+                    loser_user = session.white_user if winner_color == "black" else session.black_user
+
+                    session.engine.state.end_game(winner_color)
+                    session.game_over_handled = True
+
+                    # עדכון ELO
+                    new_w, new_l = db.update_ratings(winner_user, loser_user)
+                    print(f"[SERVER] Auto-resign: {loser_user} lost. ELO: {winner_user}={new_w}, {loser_user}={new_l}")
+
+                    # מודיע ליריב שנשאר
+                    opponent_ws = session.white_ws if winner_color == "white" else session.black_ws
+                    try:
+                        await opponent_ws.send(json.dumps({
+                            "type": "opponent_resigned",
+                            "message": f"{loser_user} disconnected. You win!",
+                        }))
+                    except:
+                        pass
+
+                else:
+                    # שולח countdown ליריב
+                    opponent_ws = session.get_opponent_ws(
+                        session.white_ws if session.disconnected_player == "white" else session.black_ws
+                    )
+                    try:
+                        await opponent_ws.send(json.dumps({
+                            "type": "disconnect_countdown",
+                            "seconds_remaining": int(remaining),
+                        }))
+                    except:
+                        pass
+
+
+# ===========================================================================
+# Game tick — advances time for all active games
 # ===========================================================================
 
 async def game_tick():
-    """מקדם זמן כל 33ms (30 FPS) ושולח עדכונים אם יש שינוי."""
-    global game_start_time
+    """מקדם זמן כל 33ms לכל המשחקים הפעילים."""
     last_time = time.time()
 
     while True:
-        await asyncio.sleep(0.033)  # ~30 FPS
-
-        if engine is None or len(players) < 2:
-            continue
+        await asyncio.sleep(0.033)
 
         current_time = time.time()
         elapsed_ms = int((current_time - last_time) * 1000)
         last_time = current_time
 
-        if elapsed_ms > 0:
-            events = engine.wait(elapsed_ms)
-            if events:
-                # בודק אם game over — מעדכן ELO
-                snapshot = engine.get_snapshot()
-                if snapshot.game_over and snapshot.winner:
-                    winner_username = None
-                    loser_username = None
-                    for info in players.values():
-                        if info["color"] == snapshot.winner:
-                            winner_username = info["username"]
-                        else:
-                            loser_username = info["username"]
-                    if winner_username and loser_username:
-                        new_w, new_l = db.update_ratings(winner_username, loser_username)
-                        print(f"[SERVER] ELO updated: {winner_username}={new_w}, {loser_username}={new_l}")
+        if elapsed_ms <= 0:
+            continue
 
-                # שולח מצב מעודכן
-                state = get_game_state_json()
-                for ws in list(players.keys()):
+        for game_id, session in list(active_games.items()):
+            if session.engine.game_over:
+                continue
+
+            events = session.engine.wait(elapsed_ms)
+            if events:
+                # שולח state מעודכן
+                state = session.get_state_json()
+                for ws in [session.white_ws, session.black_ws]:
                     try:
-                        await ws.send(json.dumps({"type": "state", "data": json.loads(state)}))
+                        await ws.send(json.dumps({"type": "state", "data": state}))
                     except:
                         pass
+
+                # בודק game over
+                if session.engine.game_over and not session.game_over_handled:
+                    session.game_over_handled = True
+                    snapshot = session.engine.get_snapshot()
+                    winner_user = session.white_user if snapshot.winner == "white" else session.black_user
+                    loser_user = session.black_user if snapshot.winner == "white" else session.white_user
+                    new_w, new_l = db.update_ratings(winner_user, loser_user)
+                    print(f"[SERVER] Game #{game_id} over. {winner_user} wins! ELO: {new_w}/{new_l}")
 
 
 # ===========================================================================
@@ -276,26 +427,17 @@ async def game_tick():
 # ===========================================================================
 
 async def main():
-    global engine, bus
-
-    # יוצר את המשחק
-    board, error = parse_board(DEFAULT_BOARD)
-    if error:
-        print(f"Board error: {error}")
-        return
-
-    bus = EventBus()
-    engine = GameEngine(board, bus=bus)
-
     print(f"[SERVER] Kung Fu Chess server running on ws://{HOST}:{PORT}")
-    print("[SERVER] Waiting for 2 players...")
+    print("[SERVER] Waiting for players...")
 
-    # מריץ את ה-tick ברקע
+    # מריץ tasks ברקע
     asyncio.create_task(game_tick())
+    asyncio.create_task(matchmaking_timeout_checker())
+    asyncio.create_task(disconnect_timeout_checker())
 
     # מריץ שרת WebSocket
     async with websockets.serve(handle_client, HOST, PORT):
-        await asyncio.Future()  # רץ לנצח
+        await asyncio.Future()
 
 
 if __name__ == "__main__":

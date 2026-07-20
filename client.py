@@ -1,15 +1,10 @@
 """
 Kung Fu Chess — WebSocket Client
 
-מתחבר לServer, מקבל מצב לוח, שולח פקודות.
-
-שימוש:
-    python client.py
-
-פקודות:
-    הקלד מהלך כמו: WRa1a5 (White Rook from a1 to a5)
-    או: JUMP WPe2 (White Pawn at e2 jumps)
-    או: quit (יציאה)
+Flow:
+    1. Login/Register
+    2. Press Play → matchmaking
+    3. Game starts → send moves, receive state
 """
 import asyncio
 import json
@@ -26,26 +21,61 @@ async def receive_messages(websocket):
             data = json.loads(message)
             msg_type = data.get("type")
 
-            if msg_type == "assigned":
+            if msg_type == "logged_in":
+                print(f"\n✓ Logged in as: {data['username']} (Rating: {data['rating']})")
+                print("\nType 'play' to find a game, 'quit' to exit")
+                print("> ", end="", flush=True)
+
+            elif msg_type == "searching":
+                print(f"\n⏳ {data['message']}")
+                print("   (waiting up to 60 seconds...)")
+
+            elif msg_type == "matchmaking_failed":
+                print(f"\n✗ {data['message']}")
+                print("> ", end="", flush=True)
+
+            elif msg_type == "game_start":
                 color = data["color"]
-                print(f"\n--- You are: {color.upper()} ---\n")
+                opponent = data["opponent"]
+                opp_rating = data["opponent_rating"]
+                print(f"\n{'='*40}")
+                print(f"  GAME FOUND!")
+                print(f"  You are: {color.upper()}")
+                print(f"  Opponent: {opponent} (Rating: {opp_rating})")
+                print(f"{'='*40}")
+                print("\nCommands: WRa1a5 (move), JUMP WPe2 (jump), quit")
+                print("> ", end="", flush=True)
 
             elif msg_type == "state":
                 state = data["data"]
-                print("\n" + "=" * 40)
+                print(f"\n{'='*40}")
                 print(state["board"])
                 print(f"Score: White={state['white_score']} | Black={state['black_score']}")
-                if state["game_over"]:
-                    print(f"*** GAME OVER — {state['winner']} wins! ***")
-                print("=" * 40)
-                print("Your move: ", end="", flush=True)
+                if state.get("game_over"):
+                    winner = state.get("winner", "?")
+                    print(f"\n*** GAME OVER — {winner} wins! ***")
+                print(f"{'='*40}")
+                print("> ", end="", flush=True)
 
             elif msg_type == "rejected":
                 print(f"  [Rejected: {data['reason']}]")
-                print("Your move: ", end="", flush=True)
+                print("> ", end="", flush=True)
 
             elif msg_type == "error":
                 print(f"  [Error: {data['message']}]")
+                print("> ", end="", flush=True)
+
+            elif msg_type == "opponent_disconnected":
+                countdown = data["countdown"]
+                print(f"\n⚠ Opponent disconnected! Auto-resign in {countdown}s...")
+
+            elif msg_type == "disconnect_countdown":
+                remaining = data["seconds_remaining"]
+                print(f"  ⏱ Opponent returns in {remaining}s...", end="\r", flush=True)
+
+            elif msg_type == "opponent_resigned":
+                print(f"\n🏆 {data['message']}")
+                print("> ", end="", flush=True)
 
     except websockets.exceptions.ConnectionClosed:
         print("\n[Disconnected from server]")
@@ -56,7 +86,6 @@ async def send_commands(websocket):
     loop = asyncio.get_event_loop()
 
     while True:
-        # קורא input בצורה שלא חוסמת
         cmd = await loop.run_in_executor(None, sys.stdin.readline)
         cmd = cmd.strip()
 
@@ -64,12 +93,22 @@ async def send_commands(websocket):
             await websocket.close()
             break
 
-        if cmd:
-            await websocket.send(cmd)
+        if cmd.lower() == "play":
+            await websocket.send(json.dumps({"type": "play"}))
+
+        elif cmd.startswith("JUMP"):
+            await websocket.send(json.dumps({"type": "jump", "cmd": cmd}))
+
+        elif len(cmd) == 6 and cmd[0] in "WB":
+            await websocket.send(json.dumps({"type": "move", "cmd": cmd}))
+
+        elif cmd:
+            print("  Unknown command. Use: WRa1a5 / JUMP WPe2 / play / quit")
+            print("> ", end="", flush=True)
 
 
 async def main():
-    # --- Home screen: Login ---
+    # --- Home screen ---
     print("=" * 40)
     print("   KUNG FU CHESS")
     print("=" * 40)
@@ -86,7 +125,7 @@ async def main():
 
     action = "register" if choice == "2" else "login"
 
-    print(f"\nConnecting to {SERVER_URL}...")
+    print(f"\nConnecting to server...")
 
     async with websockets.connect(SERVER_URL) as websocket:
         # שולח login/register
@@ -95,21 +134,6 @@ async def main():
             "username": username,
             "password": password,
         }))
-
-        # מחכה לתשובה
-        response = await websocket.recv()
-        data = json.loads(response)
-
-        if data.get("type") == "error":
-            print(f"Error: {data['message']}")
-            return
-
-        if data.get("type") == "assigned":
-            color = data["color"]
-            rating = data.get("rating", 1200)
-            print(f"\nWelcome {username}! (Rating: {rating})")
-            print(f"You are: {color.upper()}")
-            print("Waiting for opponent...")
 
         # מריץ קבלה ושליחה במקביל
         receive_task = asyncio.create_task(receive_messages(websocket))
