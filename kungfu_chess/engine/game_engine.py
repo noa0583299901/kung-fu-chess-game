@@ -282,15 +282,20 @@ class GameEngine:
         return msg
 
     def get_cooldown_info(self):
-        """מחזיר dict: piece_id -> progress (0.0=just started, 1.0=about to finish)."""
+        """מחזיר dict: 'row,col' -> progress (0.0=just started, 1.0=about to finish)."""
         now = time.time()
         info = {}
         cooldown_sec = COOLDOWN_DURATION_MS / 1000.0
         for pid, expire in self._resting_pieces.items():
             remaining = expire - now
             if remaining > 0:
-                progress = 1.0 - (remaining / cooldown_sec)  # 0=full yellow, 1=transparent
-                info[pid] = progress
+                progress = 1.0 - (remaining / cooldown_sec)
+                # מוצא את הכלי לפי ID ומחזיר position
+                for p in self.board.all_pieces():
+                    if p.id == pid:
+                        key = f"{p.cell.row},{p.cell.col}"
+                        info[key] = progress
+                        break
         return info
 
     def get_snapshot(self) -> GameSnapshot:

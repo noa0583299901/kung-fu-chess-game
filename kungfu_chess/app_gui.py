@@ -165,7 +165,15 @@ def _game_loop(engine, controller, renderer, board_lines, bus):
         snapshot = engine.get_snapshot()
         motion_info = engine.get_active_motion_info()
         promotion_msg = engine.get_promotion_message()
-        cooldown_info = engine.get_cooldown_info()
+        cooldown_raw = engine.get_cooldown_info()
+        # ממיר "row,col" → piece_id ל-renderer
+        cooldown_info = {}
+        for key, progress in cooldown_raw.items():
+            row, col = map(int, key.split(","))
+            from kungfu_chess.model.position import Position as Pos
+            p = engine.board.get_piece_at(Pos(row, col))
+            if p:
+                cooldown_info[p.id] = progress
         canvas = renderer.render_frame(
             snapshot, controller.selected, motion_info, promotion_msg, cooldown_info
         )

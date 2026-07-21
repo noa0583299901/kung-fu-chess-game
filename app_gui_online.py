@@ -321,16 +321,16 @@ def gui_main():
 
             # cooldown info — מסמן כלים ב-resting על ה-board
             cooldown_info = current_state.get("cooldowns", {})
-            # ממיר keys מ-string ל-int (JSON שומר keys כ-strings)
-            cooldown_info = {int(k): v for k, v in cooldown_info.items()} if cooldown_info else {}
-
-            # מסמן כלים ב-resting
+            # key = "row,col" → מזהים כלים לפי position
+            cooldown_by_id = {}
             if cooldown_info and snapshot.board:
                 for piece in snapshot.board.all_pieces():
-                    if piece.id in cooldown_info:
+                    key = f"{piece.cell.row},{piece.cell.col}"
+                    if key in cooldown_info:
                         piece.state = "resting"
+                        cooldown_by_id[piece.id] = cooldown_info[key]
 
-            canvas = renderer.render_frame(snapshot, selected_pos, motion_info, None, cooldown_info, names)
+            canvas = renderer.render_frame(snapshot, selected_pos, motion_info, None, cooldown_by_id, names)
             cv2.imshow(window_name, canvas.img)
 
         # --- Keyboard ---
