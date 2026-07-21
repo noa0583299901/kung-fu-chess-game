@@ -88,6 +88,22 @@ class GameSession:
     def get_state_json(self):
         snapshot = self.engine.get_snapshot()
         board_text = board_to_string(snapshot.board)
+        
+        # motion info לאנימציה בclient
+        motion_data = []
+        motion_info = self.engine.get_active_motion_info()
+        if motion_info:
+            for mi in motion_info:
+                motion_data.append({
+                    "source_row": mi["source"].row,
+                    "source_col": mi["source"].col,
+                    "dest_row": mi["destination"].row,
+                    "dest_col": mi["destination"].col,
+                    "progress": mi["progress"],
+                    "piece_color": mi["piece"].color,
+                    "piece_kind": mi["piece"].kind,
+                })
+
         return {
             "board": board_text,
             "game_over": snapshot.game_over,
@@ -97,6 +113,7 @@ class GameSession:
             "timestamp": time.time() - self.start_time,
             "white_name": self.white_user,
             "black_name": self.black_user,
+            "motions": motion_data,
         }
 
 
@@ -554,8 +571,10 @@ async def game_tick():
                 continue
 
             events = session.engine.wait(elapsed_ms)
-            if events:
-                # שולח state מעודכן
+
+            # שולח state כל frame כשיש תנועה פעילה (לאנימציה חלקה)
+            has_motion = session.engine._arbiter.has_active_motion
+            if events or has_motion:
                 state = session.get_state_json()
                 for ws in [session.white_ws, session.black_ws]:
                     try:

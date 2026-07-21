@@ -294,7 +294,23 @@ def gui_main():
             else:
                 names = {"white": current_state.get("white_name", "White"),
                          "black": current_state.get("black_name", "Black")}
-            canvas = renderer.render_frame(snapshot, selected_pos, None, None, None, names)
+
+            # motion info מהserver — לאנימציה חלקה
+            motion_info = None
+            motions_data = current_state.get("motions", [])
+            if motions_data:
+                from kungfu_chess.model.piece import Piece
+                motion_info = []
+                for md in motions_data:
+                    fake_piece = Piece(0, md["piece_color"], md["piece_kind"], Position(md["source_row"], md["source_col"]))
+                    motion_info.append({
+                        "piece": fake_piece,
+                        "source": Position(md["source_row"], md["source_col"]),
+                        "destination": Position(md["dest_row"], md["dest_col"]),
+                        "progress": md["progress"],
+                    })
+
+            canvas = renderer.render_frame(snapshot, selected_pos, motion_info, None, None, names)
             cv2.imshow(window_name, canvas.img)
 
         # --- Keyboard ---

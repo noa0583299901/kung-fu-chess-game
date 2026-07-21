@@ -168,7 +168,7 @@ class Renderer:
         # --- Top bar: player name + score ---
         black_name = (player_names or {}).get("black", "Black")
         white_name = (player_names or {}).get("white", "White")
-        canvas.put_text(f"{black_name}", total_width // 2 - 50, 22, 0.5,
+        canvas.put_text(f"Name: {black_name}", total_width // 2 - 60, 22, 0.5,
                         color=(255, 255, 255, 255), thickness=1)
         canvas.put_text(f"Score: {snapshot.black_score}",
                         total_width // 2 + 80, 22, 0.5,
@@ -318,8 +318,8 @@ class Renderer:
         canvas.put_text(f"Score: {snapshot.white_score}",
                         total_width // 2 - 40, score_y, 0.6,
                         color=(255, 255, 255, 255), thickness=2)
-        canvas.put_text(f"{white_name}",
-                        total_width // 2 - 50, score_y + 30, 0.5,
+        canvas.put_text(f"Name: {white_name}",
+                        total_width // 2 - 60, score_y + 30, 0.5,
                         color=(255, 255, 255, 255), thickness=1)
 
         # --- Game over ---
