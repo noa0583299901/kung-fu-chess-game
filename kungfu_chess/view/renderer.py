@@ -143,77 +143,85 @@ class Renderer:
     def render_frame(self, snapshot, selected_pos=None, motion_info=None, promotion_msg=None, cooldown_info=None, player_names=None):
         """
         מצייר frame אחד של המשחק ומחזיר את ה-canvas.
-        Layout: [Black moves] [Board] [White moves]
-                Name top, Score+Name bottom
+        מזמן פונקציות עזר לכל חלק בציור.
         """
         board = snapshot.board
-
-        # גודל תא לציור
         render_cell = RENDER_CELL_SIZE
         board_width = board.cols * render_cell
         board_height = board.rows * render_cell
 
-        # Panel dimensions
         side_panel_width = SIDE_PANEL_WIDTH
         top_bar_height = TOP_BAR_HEIGHT
         bottom_bar_height = BOTTOM_BAR_HEIGHT
-
         total_width = side_panel_width + board_width + side_panel_width
         total_height = top_bar_height + board_height + bottom_bar_height
 
-        # Create canvas
-        canvas = Img()
-        canvas.img = np.ones((total_height, total_width, 4), dtype=np.uint8) * 50
-
-        # --- Top bar: player name + score ---
-        black_name = (player_names or {}).get("black", "Black")
-        white_name = (player_names or {}).get("white", "White")
-        canvas.put_text(f"Name: {black_name}", total_width // 2 - 60, 22, 0.5,
-                        color=(255, 255, 255, 255), thickness=1)
-        canvas.put_text(f"Score: {snapshot.black_score}",
-                        total_width // 2 + 80, 22, 0.5,
-                        color=(200, 200, 255, 255), thickness=1)
-
-        # --- Board ---
         board_x_offset = side_panel_width
         board_y_offset = top_bar_height
 
-        board_img = Img().read(self._board_img_path,
-                               size=(board_width, board_height))
-        board_img.draw_on(canvas, board_x_offset, board_y_offset)
+        # יוצר canvas ריק
+        canvas = Img()
+        canvas.img = np.ones((total_height, total_width, 4), dtype=np.uint8) * 50
 
-        # Column letters (a-h)
-        col_letters = "abcdefgh"
-        for c in range(min(board.cols, 8)):
-            cx = board_x_offset + c * render_cell + render_cell // 2 - 5
-            canvas.put_text(col_letters[c], cx, board_y_offset + board_height + 15, 0.4,
-                            color=(200, 200, 200, 255), thickness=1)
+        # שמות שחקנים
+        names = player_names or {}
+        black_name = names.get("black", "Black")
+        white_name = names.get("white", "White")
 
-        # Row numbers (8-1, top to bottom)
-        for r in range(min(board.rows, 8)):
-            ry = board_y_offset + r * render_cell + render_cell // 2 + 5
-            canvas.put_text(str(8 - r), board_x_offset - 15, ry, 0.4,
-                            color=(200, 200, 200, 255), thickness=1)
-
-        # --- Highlight selected ---
+        # מצייר כל חלק
+        self._draw_top_bar(canvas, black_name, snapshot.black_score, total_width)
+        self._draw_board_image(canvas, board_width, board_height, board_x_offset, board_y_offset, render_cell, board)
         if selected_pos is not None:
             self._draw_highlight_offset(canvas, selected_pos, board_x_offset, board_y_offset)
+        self._draw_cooldown_overlays(canvas, board, cooldown_info, board_x_offset, board_y_offset, render_cell)
+        self._draw_static_pieces(canvas, board, motion_info, board_x_offset, board_y_offset, render_cell)
+        self._draw_moving_pieces(canvas, motion_info, board_x_offset, board_y_offset, render_cell)
+        self._draw_left_panel(canvas, snapshot, top_bar_height, board_height)
+        self._draw_right_panel(canvas, snapshot, top_bar_height, board_width, side_panel_width, board_height)
+        self._draw_bottom_bar(canvas, white_name, snapshot.white_score, total_width, top_bar_height, board_height)
+        self._draw_game_over(canvas, snapshot, board_x_offset, board_y_offset, board_width, board_height)
+        self._draw_promotion(canvas, promotion_msg, board_x_offset, board_y_offset, board_width)
 
-        # --- Cooldown overlay (dark yellow fading out) ---
+        return canvas
+
+    # ------------------------------------------------------------------
+    # פונקציות עזר — כל אחת מציירת חלק אחד
+    # ------------------------------------------------------------------
+
+    def _draw_top_bar(self, canvas, black_name, black_score, total_width):
+        """מצייר שם שחקן שחור + ניקוד למעלה."""
+        canvas.put_text(f"Name: {black_name}", total_width // 2 - 60, 22, 0.5,
+                        color=(255, 255, 255, 255), thickness=1)
+        canvas.put_text(f"Score: {black_score}",
+                        total_width // 2 + 80, 22, 0.5,
+                        color=(200, 200, 255, 255), thickness=1)
+
+    def _draw_board_image(self, canvas, board_width, board_height, x_off, y_off, render_cell, board):
+        """מצייר תמונת לוח + אותיות/מספרים."""
+        board_img = Img().read(self._board_img_path, size=(board_width, board_height))
+        board_img.draw_on(canvas, x_off, y_off)
+
+        col_letters = "abcdefgh"
+        for c in range(min(board.cols, 8)):
+            cx = x_off + c * render_cell + render_cell // 2 - 5
+            canvas.put_text(col_letters[c], cx, y_off + board_height + 15, 0.4,
+                            color=(200, 200, 200, 255), thickness=1)
+        for r in range(min(board.rows, 8)):
+            ry = y_off + r * render_cell + render_cell // 2 + 5
+            canvas.put_text(str(8 - r), x_off - 15, ry, 0.4,
+                            color=(200, 200, 200, 255), thickness=1)
+
+    def _draw_cooldown_overlays(self, canvas, board, cooldown_info, x_off, y_off, render_cell):
+        """מצייר overlay צהוב שמתרוקן על כלים ב-cooldown."""
         if cooldown_info is None:
             cooldown_info = {}
         for piece in board.all_pieces():
             if piece.state == "resting" and piece.id in cooldown_info:
-                px = board_x_offset + piece.cell.col * render_cell
-                py = board_y_offset + piece.cell.row * render_cell
-                progress = cooldown_info[piece.id]  # 0=just started, 1=about to finish
-
-                # צהוב כהה — opacity יורד עם הזמן
-                # opacity: 180 בהתחלה → 0 בסוף
+                px = x_off + piece.cell.col * render_cell
+                py = y_off + piece.cell.row * render_cell
+                progress = cooldown_info[piece.id]
                 opacity = int(180 * (1.0 - progress))
                 if opacity > 0:
-                    # מצייר מלבן צהוב כהה חצי-שקוף
-                    # גובה המלבן יורד — "מתרוקן" מלמעלה למטה
                     fill_height = int(render_cell * (1.0 - progress))
                     if fill_height > 0:
                         y_start = py + (render_cell - fill_height)
@@ -224,8 +232,8 @@ class Renderer:
                             overlay[:, :, c] = ((1 - alpha) * overlay[:, :, c] + alpha * yellow[:, :, c]).astype(np.uint8)
                         canvas.img[y_start:y_start+fill_height, px:px+render_cell] = overlay
 
-        # --- Draw pieces ---
-        # positions of pieces in motion (don't draw them statically)
+    def _draw_static_pieces(self, canvas, board, motion_info, x_off, y_off, render_cell):
+        """מצייר כלים שעומדים במקום (לא בתנועה)."""
         moving_source_positions = set()
         if motion_info is not None:
             for mi in motion_info:
@@ -243,7 +251,6 @@ class Renderer:
             if folder is None:
                 continue
 
-            # כלי שקופץ (DEFENDING) — אנימציית jump + מוגבה
             if piece.state == "defending":
                 anim = self._get_animation(folder, "jump")
             else:
@@ -252,37 +259,38 @@ class Renderer:
             if frame is None:
                 continue
 
-            px = board_x_offset + piece.cell.col * render_cell
-            py = board_y_offset + piece.cell.row * render_cell
-            # אם קופץ — מעלה 15px למעלה (אפקט "באוויר")
+            px = x_off + piece.cell.col * render_cell
+            py = y_off + piece.cell.row * render_cell
             if piece.state == "defending":
                 py -= 15
-            # אפקט נשימה לכלים idle — scale קטן מעלה/מטה
             elif piece.state == IDLE or piece.state == "resting":
                 breath_cycle = math.sin(time.time() * 3 + piece.id * 0.5) * 2
                 py += int(breath_cycle)
             frame.draw_on(canvas, px, py)
 
-        # --- Draw moving pieces (interpolated) ---
-        if motion_info is not None:
-            for mi in motion_info:
-                piece = mi["piece"]
-                src = mi["source"]
-                dst = mi["destination"]
-                progress = mi["progress"]
+    def _draw_moving_pieces(self, canvas, motion_info, x_off, y_off, render_cell):
+        """מצייר כלים שנעים (interpolation בין source ל-destination)."""
+        if motion_info is None:
+            return
+        for mi in motion_info:
+            piece = mi["piece"]
+            src = mi["source"]
+            dst = mi["destination"]
+            progress = mi["progress"]
 
-                folder = PIECE_FOLDER_MAP.get((piece.color, piece.kind))
-                if folder:
-                    anim = self._get_animation(folder, "jump")
-                    frame = anim.get_current_frame()
-                    if frame:
-                        px = int(board_x_offset + src.col * render_cell +
-                                 (dst.col - src.col) * render_cell * progress)
-                        py = int(board_y_offset + src.row * render_cell +
-                                 (dst.row - src.row) * render_cell * progress)
-                        frame.draw_on(canvas, px, py)
+            folder = PIECE_FOLDER_MAP.get((piece.color, piece.kind))
+            if folder:
+                anim = self._get_animation(folder, "jump")
+                frame = anim.get_current_frame()
+                if frame:
+                    px = int(x_off + src.col * render_cell +
+                             (dst.col - src.col) * render_cell * progress)
+                    py = int(y_off + src.row * render_cell +
+                             (dst.row - src.row) * render_cell * progress)
+                    frame.draw_on(canvas, px, py)
 
-        # --- Left panel: Black moves ---
+    def _draw_left_panel(self, canvas, snapshot, top_bar_height, board_height):
+        """מצייר panel שמאלי — מהלכי שחור."""
         lx = 5
         canvas.put_text("Black", lx + 20, top_bar_height + 20, 0.5,
                         color=(180, 180, 255, 255), thickness=1)
@@ -299,7 +307,8 @@ class Renderer:
             canvas.put_text(str(move), lx + 80, y_pos, 0.3,
                             color=(220, 220, 255, 255), thickness=1)
 
-        # --- Right panel: White moves ---
+    def _draw_right_panel(self, canvas, snapshot, top_bar_height, board_width, side_panel_width, board_height):
+        """מצייר panel ימני — מהלכי לבן."""
         rx = side_panel_width + board_width + 5
         canvas.put_text("White", rx + 20, top_bar_height + 20, 0.5,
                         color=(180, 255, 180, 255), thickness=1)
@@ -316,32 +325,33 @@ class Renderer:
             canvas.put_text(str(move), rx + 80, y_pos, 0.3,
                             color=(220, 255, 220, 255), thickness=1)
 
-        # --- Bottom bar: Score + White player name ---
+    def _draw_bottom_bar(self, canvas, white_name, white_score, total_width, top_bar_height, board_height):
+        """מצייר שם שחקן לבן + ניקוד למטה."""
         score_y = top_bar_height + board_height + 25
-        canvas.put_text(f"Score: {snapshot.white_score}",
+        canvas.put_text(f"Score: {white_score}",
                         total_width // 2 - 40, score_y, 0.6,
                         color=(255, 255, 255, 255), thickness=2)
         canvas.put_text(f"Name: {white_name}",
                         total_width // 2 - 60, score_y + 30, 0.5,
                         color=(255, 255, 255, 255), thickness=1)
 
-        # --- Game over ---
+    def _draw_game_over(self, canvas, snapshot, x_off, y_off, board_width, board_height):
+        """מצייר הודעת game over."""
         if snapshot.game_over:
             winner = "White" if snapshot.winner == WHITE else "Black"
-            cx = board_x_offset + board_width // 2 - 120
-            cy = board_y_offset + board_height // 2
+            cx = x_off + board_width // 2 - 120
+            cy = y_off + board_height // 2
             canvas.put_text(f"GAME OVER - {winner} wins!",
                             cx, cy, 0.9,
                             color=(0, 0, 255, 255), thickness=3)
 
-        # --- Promotion notification ---
+    def _draw_promotion(self, canvas, promotion_msg, x_off, y_off, board_width):
+        """מצייר הודעת promotion."""
         if promotion_msg:
-            cx = board_x_offset + board_width // 2 - 100
-            cy = board_y_offset + 20
+            cx = x_off + board_width // 2 - 100
+            cy = y_off + 20
             canvas.put_text(promotion_msg, cx, cy, 0.5,
                             color=(0, 255, 255, 255), thickness=2)
-
-        return canvas
 
     def _draw_highlight_offset(self, canvas, pos, x_offset, y_offset, cell_size=RENDER_CELL_SIZE):
         """מצייר highlight עם offset."""
