@@ -225,15 +225,18 @@ class Renderer:
                         canvas.img[y_start:y_start+fill_height, px:px+render_cell] = overlay
 
         # --- Draw pieces ---
-        moving_piece_ids = set()
+        # positions of pieces in motion (don't draw them statically)
+        moving_source_positions = set()
         if motion_info is not None:
             for mi in motion_info:
-                moving_piece_ids.add(mi["piece"].id)
+                moving_source_positions.add((mi["source"].row, mi["source"].col))
 
         for piece in board.all_pieces():
             if piece.state == CAPTURED:
                 continue
-            if piece.id in moving_piece_ids:
+            if piece.state == "moving":
+                continue
+            if (piece.cell.row, piece.cell.col) in moving_source_positions:
                 continue
 
             folder = PIECE_FOLDER_MAP.get((piece.color, piece.kind))

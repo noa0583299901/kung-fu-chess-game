@@ -215,6 +215,15 @@ def build_snapshot_from_state(state_dict):
     if board is None:
         return None
 
+    # מסיר כלים שנמצאים בתנועה מה-board (כדי שלא יצוירו פעמיים)
+    motions_data = state_dict.get("motions", [])
+    for md in motions_data:
+        src_pos = Position(md["source_row"], md["source_col"])
+        piece_at_src = board.get_piece_at(src_pos)
+        if piece_at_src is not None:
+            # לא מסירים אמיתי — פשוט משנים state ל-moving כדי שRenderer ידלג
+            piece_at_src.state = "moving"
+
     return GameSnapshot(
         board=board,
         game_over=state_dict.get("game_over", False),
@@ -310,7 +319,18 @@ def gui_main():
                         "progress": md["progress"],
                     })
 
-            canvas = renderer.render_frame(snapshot, selected_pos, motion_info, None, None, names)
+            # cooldown info — מסמן כלים ב-resting על ה-board
+            cooldown_info = current_state.get("cooldowns", {})
+            # ממיר keys מ-string ל-int (JSON שומר keys כ-strings)
+            cooldown_info = {int(k): v for k, v in cooldown_info.items()} if cooldown_info else {}
+
+            # מסמן כלים ב-resting
+            if cooldown_info and snapshot.board:
+                for piece in snapshot.board.all_pieces():
+                    if piece.id in cooldown_info:
+                        piece.state = "resting"
+
+            canvas = renderer.render_frame(snapshot, selected_pos, motion_info, None, cooldown_info, names)
             cv2.imshow(window_name, canvas.img)
 
         # --- Keyboard ---
@@ -333,20 +353,38 @@ if __name__ == "__main__":
     print("\n1. Login")
     print("2. Register")
     choice = input("Choice (1/2): ").strip()
+    if choice not in ("1", "2"):
+        print("Error: choose 1 or 2")
+        exit(1)
+
     username = input("Username: ").strip()
+    if not username:
+        print("Error: username cannot be empty")
+        exit(1)
+
     password = input("Password: ").strip()
+    if not password:
+        print("Error: password cannot be empty")
+        exit(1)
+
     action = "register" if choice == "2" else "login"
 
     print("\n1 — Play (matchmaking)")
     print("2 — Create room")
     print("3 — Join room")
     lobby_choice = input("Choice: ").strip()
+    if lobby_choice not in ("1", "2", "3"):
+        print("Error: choose 1, 2, or 3")
+        exit(1)
+
     room_id_input = ""
     if lobby_choice == "3":
         room_id_input = input("Room ID: ").strip()
+        if not room_id_input:
+            print("Error: room ID cannot be empty")
+            exit(1)
 
     # שלב 2: מפעיל WebSocket עם הפרטים שהוזנו
-    import functools
     ws_thread = threading.Thread(
         target=start_ws_thread,
         args=(action, username, password, lobby_choice, room_id_input),

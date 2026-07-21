@@ -91,3 +91,50 @@ Traceback (most recent call last):
     color = game_session.get_color(websocket)
             ^^^^^^^^^^^^^^^^^^^^^^
 AttributeError: 'GameSession' object has no attribute 'get_color'
+2026-07-21 12:26:44,016 [SERVER] server listening on 127.0.0.1:8765
+2026-07-21 12:26:44,017 [SERVER] server listening on [::1]:8765
+2026-07-21 12:27:18,858 [SERVER] connection open
+2026-07-21 12:27:57,671 [SERVER] connection open
+2026-07-21 12:28:25,180 [SERVER] connection open
+2026-07-21 12:28:58,692 [SERVER] connection open
+2026-07-21 12:29:14,991 [SERVER] connection handler failed
+Traceback (most recent call last):
+  File "C:\Users\noa05\AppData\Local\Programs\Python\Python313\Lib\asyncio\windows_events.py", line 463, in finish_socket_func
+    return ov.getresult()
+           ~~~~~~~~~~~~^^
+OSError: [WinError 64] The specified network name is no longer available
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\noa05\AppData\Local\Programs\Python\Python313\Lib\asyncio\proactor_events.py", line 286, in _loop_reading
+    length = fut.result()
+  File "C:\Users\noa05\AppData\Local\Programs\Python\Python313\Lib\asyncio\windows_events.py", line 804, in _poll
+    value = callback(transferred, key, ov)
+  File "C:\Users\noa05\AppData\Local\Programs\Python\Python313\Lib\asyncio\windows_events.py", line 467, in finish_socket_func
+    raise ConnectionResetError(*exc.args)
+ConnectionResetError: [WinError 64] The specified network name is no longer available
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\noa05\Documents\שחמט\server.py", line 241, in handle_client
+    async for message in websocket:
+    ...<209 lines>...
+                await game_session.black_ws.send(json.dumps({"type": "state", "data": state}))
+  File "C:\Users\noa05\AppData\Local\Programs\Python\Python313\Lib\site-packages\websockets\asyncio\connection.py", line 244, in __aiter__
+    yield await self.recv()
+          ^^^^^^^^^^^^^^^^^
+  File "C:\Users\noa05\AppData\Local\Programs\Python\Python313\Lib\site-packages\websockets\asyncio\connection.py", line 324, in recv
+    raise self.protocol.close_exc from self.recv_exc
+websockets.exceptions.ConnectionClosedError: no close frame received or sent
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\noa05\AppData\Local\Programs\Python\Python313\Lib\site-packages\websockets\asyncio\server.py", line 376, in conn_handler
+    await self.handler(connection)
+  File "C:\Users\noa05\Documents\שחמט\server.py", line 461, in handle_client
+    color = game_session.get_color(websocket)
+            ^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'GameSession' object has no attribute 'get_color'

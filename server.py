@@ -114,6 +114,7 @@ class GameSession:
             "white_name": self.white_user,
             "black_name": self.black_user,
             "motions": motion_data,
+            "cooldowns": self.engine.get_cooldown_info(),
         }
 
 
