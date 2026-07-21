@@ -115,6 +115,11 @@ class GameSession:
             "black_name": self.black_user,
             "motions": motion_data,
             "cooldowns": self.engine.get_cooldown_info(),
+            "moves_log": [
+                {"color": m.color, "kind": m.piece_kind, "dest_row": m.destination.row,
+                 "dest_col": m.destination.col, "time": m.timestamp}
+                for m in snapshot.moves_log
+            ],
         }
 
 

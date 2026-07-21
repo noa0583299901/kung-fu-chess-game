@@ -224,13 +224,26 @@ def build_snapshot_from_state(state_dict):
             # לא מסירים אמיתי — פשוט משנים state ל-moving כדי שRenderer ידלג
             piece_at_src.state = "moving"
 
+    # בונה moves_log מה-state
+    from kungfu_chess.engine.game_engine import MoveLogEntry
+    moves_log = []
+    for m in state_dict.get("moves_log", []):
+        entry = MoveLogEntry(
+            m.get("kind", "pawn"),
+            m.get("color", "white"),
+            Position(m.get("dest_row", 0), m.get("dest_col", 0)),
+            Position(m.get("dest_row", 0), m.get("dest_col", 0)),
+            m.get("time", 0),
+        )
+        moves_log.append(entry)
+
     return GameSnapshot(
         board=board,
         game_over=state_dict.get("game_over", False),
         winner=state_dict.get("winner"),
         white_score=state_dict.get("white_score", 0),
         black_score=state_dict.get("black_score", 0),
-        moves_log=[],
+        moves_log=moves_log,
     )
 
 

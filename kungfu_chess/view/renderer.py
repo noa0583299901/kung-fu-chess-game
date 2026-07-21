@@ -213,10 +213,10 @@ class Renderer:
 
     def _draw_cooldown_overlays(self, canvas, board, cooldown_info, x_off, y_off, render_cell):
         """מצייר overlay צהוב שמתרוקן על כלים ב-cooldown."""
-        if cooldown_info is None:
-            cooldown_info = {}
+        if not cooldown_info:
+            return
         for piece in board.all_pieces():
-            if piece.state == "resting" and piece.id in cooldown_info:
+            if piece.id in cooldown_info:
                 px = x_off + piece.cell.col * render_cell
                 py = y_off + piece.cell.row * render_cell
                 progress = cooldown_info[piece.id]
