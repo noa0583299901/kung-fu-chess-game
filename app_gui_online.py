@@ -39,6 +39,9 @@ my_color = None             # "white" / "black" / "viewer"
 game_started = False
 connected = False
 ws_connection = None        # WebSocket connection
+ws_loop_ref = None          # asyncio event loop של ה-WS thread
+opponent_name = ""          # שם היריב
+my_name = ""                # שם שלי
 
 
 # ===========================================================================
@@ -99,10 +102,12 @@ async def ws_loop(action, username, password, lobby_choice, room_id_input):
             msg_type = data.get("type")
 
             if msg_type == "game_start":
+                global opponent_name
                 my_color = data.get("color", "viewer")
                 game_started = True
+                opponent_name = data.get("opponent", "Opponent")
                 print(f"\n🎮 Game started! You are: {my_color.upper()}")
-                print(f"   Opponent: {data.get('opponent', '?')}")
+                print(f"   Opponent: {opponent_name}")
 
             elif msg_type == "state":
                 current_state = data.get("data")
@@ -134,9 +139,14 @@ async def ws_loop(action, username, password, lobby_choice, room_id_input):
 
 def start_ws_thread(action, username, password, lobby_choice, room_id_input):
     """מפעיל את WebSocket loop ב-thread נפרד."""
+    global ws_loop_ref, my_name
+    my_name = username
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
-    loop.run_until_complete(ws_loop(action, username, password, lobby_choice, room_id_input))
+    ws_loop_ref = loop
+    # מריץ ws_loop כ-task ואז run_forever כדי ש-run_coroutine_threadsafe יעבוד
+    loop.create_task(ws_loop(action, username, password, lobby_choice, room_id_input))
+    loop.run_forever()
 
 
 # ===========================================================================
@@ -145,7 +155,7 @@ def start_ws_thread(action, username, password, lobby_choice, room_id_input):
 
 def send_move(source_pos, dest_pos):
     """שולח מהלך לServer. ממיר Position ל-string format."""
-    if ws_connection is None or my_color == "viewer":
+    if ws_connection is None or my_color == "viewer" or ws_loop_ref is None:
         return
 
     col_letters = "abcdefgh"
@@ -156,19 +166,17 @@ def send_move(source_pos, dest_pos):
     dst_col = col_letters[dest_pos.col] if dest_pos.col < 8 else "a"
     dst_row = str(8 - dest_pos.row)
 
-    # פורמט: WRa1a5 — אבל אנחנו לא יודעים את סוג הכלי, אז נשתמש ב-X כplaceholder
-    # Server ממילא משתמש ב-source position למציאת הכלי
     cmd = f"{color_letter}X{src_col}{src_row}{dst_col}{dst_row}"
 
     asyncio.run_coroutine_threadsafe(
         ws_connection.send(json.dumps({"type": "move", "cmd": cmd})),
-        asyncio.get_event_loop()
+        ws_loop_ref
     )
 
 
 def send_jump(position):
     """שולח jump לServer."""
-    if ws_connection is None or my_color == "viewer":
+    if ws_connection is None or my_color == "viewer" or ws_loop_ref is None:
         return
 
     col_letters = "abcdefgh"
@@ -179,7 +187,7 @@ def send_jump(position):
 
     asyncio.run_coroutine_threadsafe(
         ws_connection.send(json.dumps({"type": "jump", "cmd": cmd})),
-        asyncio.get_event_loop()
+        ws_loop_ref
     )
 
 
@@ -278,7 +286,15 @@ def gui_main():
         # --- Render ---
         snapshot = build_snapshot_from_state(current_state)
         if snapshot is not None:
-            canvas = renderer.render_frame(snapshot, selected_pos, None, None, None)
+            names = {}
+            if my_color == "white":
+                names = {"white": my_name, "black": opponent_name}
+            elif my_color == "black":
+                names = {"white": opponent_name, "black": my_name}
+            else:
+                names = {"white": current_state.get("white_name", "White"),
+                         "black": current_state.get("black_name", "Black")}
+            canvas = renderer.render_frame(snapshot, selected_pos, None, None, None, names)
             cv2.imshow(window_name, canvas.img)
 
         # --- Keyboard ---

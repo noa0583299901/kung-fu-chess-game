@@ -140,7 +140,7 @@ class Renderer:
 
         return self._animations[key]
 
-    def render_frame(self, snapshot, selected_pos=None, motion_info=None, promotion_msg=None, cooldown_info=None):
+    def render_frame(self, snapshot, selected_pos=None, motion_info=None, promotion_msg=None, cooldown_info=None, player_names=None):
         """
         מצייר frame אחד של המשחק ומחזיר את ה-canvas.
         Layout: [Black moves] [Board] [White moves]
@@ -166,7 +166,9 @@ class Renderer:
         canvas.img = np.ones((total_height, total_width, 4), dtype=np.uint8) * 50
 
         # --- Top bar: player name + score ---
-        canvas.put_text("Name: Chicko Miko", total_width // 2 - 70, 22, 0.5,
+        black_name = (player_names or {}).get("black", "Black")
+        white_name = (player_names or {}).get("white", "White")
+        canvas.put_text(f"{black_name}", total_width // 2 - 50, 22, 0.5,
                         color=(255, 255, 255, 255), thickness=1)
         canvas.put_text(f"Score: {snapshot.black_score}",
                         total_width // 2 + 80, 22, 0.5,
@@ -316,8 +318,8 @@ class Renderer:
         canvas.put_text(f"Score: {snapshot.white_score}",
                         total_width // 2 - 40, score_y, 0.6,
                         color=(255, 255, 255, 255), thickness=2)
-        canvas.put_text("Name: Musti Shusti",
-                        total_width // 2 - 70, score_y + 30, 0.5,
+        canvas.put_text(f"{white_name}",
+                        total_width // 2 - 50, score_y + 30, 0.5,
                         color=(255, 255, 255, 255), thickness=1)
 
         # --- Game over ---
