@@ -86,6 +86,18 @@ class GameSession:
         self.game_over_handled = False
 
     def get_state_json(self):
+        snapshot = self.engine.get_snapshot()
+        board_text = board_to_string(snapshot.board)
+        return {
+            "board": board_text,
+            "game_over": snapshot.game_over,
+            "winner": snapshot.winner,
+            "white_score": snapshot.white_score,
+            "black_score": snapshot.black_score,
+            "timestamp": time.time() - self.start_time,
+            "white_name": self.white_user,
+            "black_name": self.black_user,
+        }
 
 
 class Room:
