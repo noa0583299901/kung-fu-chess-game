@@ -51,7 +51,15 @@ async def ws_loop(action, username, password, lobby_choice, room_id_input):
 
     print(f"\nConnecting to {SERVER_URL}...")
 
-    async with websockets.connect(SERVER_URL) as ws:
+    try:
+        ws = await websockets.connect(SERVER_URL)
+    except ConnectionRefusedError:
+        print("\n✗ Cannot connect to server!")
+        print("  Make sure server.py is running in another terminal:")
+        print("  python server.py")
+        return
+
+    async with ws:
         ws_connection = ws
         connected = True
 
@@ -216,9 +224,22 @@ def gui_main():
     assets_dir, board_img_path = find_assets()
     renderer = Renderer(assets_dir, board_img_path)
 
+    # מחכה שהמשחק יתחיל (לא פותח חלון עדיין)
+    print("\n[GUI] Waiting for game to start...")
+    while not game_started:
+        time.sleep(0.1)
+        if not connected:
+            return
+
+    # רק עכשיו פותח חלון
+    print("[GUI] Opening game window!")
     window_name = "Kung Fu Chess — Online"
     cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
     cv2.setWindowProperty(window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+
+    # מחכה ל-state ראשון
+    while current_state is None:
+        time.sleep(0.1)
 
     selected_pos = None
     mouse_click = None
@@ -229,12 +250,6 @@ def gui_main():
             mouse_click = (x, y)
 
     cv2.setMouseCallback(window_name, on_mouse)
-
-    # מחכה שהמשחק יתחיל
-    print("\n[GUI] Waiting for game to start...")
-    while not game_started:
-        time.sleep(0.1)
-    print("[GUI] Game window open!")
 
     while True:
         # --- Handle click ---
